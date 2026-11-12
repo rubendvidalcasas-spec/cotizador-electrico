@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cotizador Eléctrico</title>
+<meta name="theme-color" content="#12233F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cotizador">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+html{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+/* Layout: app de una pantalla tipo celular. Cabecera fija con el total, zona central con scroll, barra de pestañas abajo. */
+:root{
+  --bg:#E9EEF5; --panel:#FFFFFF; --ink:#14233B; --muted:#586A85; --line:#D3DCE8;
+  --accent:#1554C8; --accent-ink:#FFFFFF; --soft:#E2EBFA;
+  --head:#12233F; --head-ink:#F2F6FC; --head-muted:#A9B9D3;
+  --warn:#9A4A06; --warn-bg:#FCEFD8; --ok:#17713F;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow","Segoe UI",Roboto,Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0A111D; --panel:#131D30; --ink:#E6ECF5; --muted:#94A4BE; --line:#27354E;
+  --accent:#74A6FF; --accent-ink:#0B1626; --soft:#1A2A47;
+  --head:#070D18; --head-ink:#F2F6FC; --head-muted:#94A4BE;
+  --warn:#F2B866; --warn-bg:#33270F; --ok:#5CCB8F; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0A111D; --panel:#131D30; --ink:#E6ECF5; --muted:#94A4BE; --line:#27354E;
+  --accent:#74A6FF; --accent-ink:#0B1626; --soft:#1A2A47;
+  --head:#070D18; --head-ink:#F2F6FC; --head-muted:#94A4BE;
+  --warn:#F2B866; --warn-bg:#33270F; --ok:#5CCB8F; color-scheme:dark }
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4}
+*{box-sizing:border-box}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;max-width:460px;margin:0 auto;display:flex;flex-direction:column;background:var(--bg);border-inline:1px solid var(--line)}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+.head{background:var(--head);color:var(--head-ink);padding-block:12px 14px;display:flex;flex-direction:column;gap:6px}
+.head-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase}
+.badge{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--head-muted);border:1px solid var(--head-muted);border-radius:3px;padding:1px 6px;white-space:nowrap}
+.total-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.total-lbl{font-size:12px;color:var(--head-muted)}
+.total{font-family:var(--f-display);font-weight:700;font-size:38px;line-height:1;font-variant-numeric:tabular-nums}
+.head-meta{font-size:12.5px;color:var(--head-muted);text-align:right;font-variant-numeric:tabular-nums}
+
+.screen{flex:1;min-height:0;overflow-y:auto;padding-block:16px 24px}
+.tab{display:flex;flex-direction:column;gap:18px}
+h2{font-family:var(--f-display);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;color:var(--muted)}
+.group{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .lbl{min-width:0;flex:1}
+.row .lbl b{font-weight:600;display:block}
+.hint{font-size:12.5px;color:var(--muted);display:block}
+.step{display:flex;align-items:center;gap:4px;flex:none}
+.step button{width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;line-height:1}
+.step button:active{background:var(--soft)}
+.step input{width:62px;height:40px;text-align:center;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-weight:600;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+.step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.step input:disabled,.step button:disabled{opacity:.55;cursor:default}
+.unit{font-size:12px;color:var(--muted);width:22px}
+.text-in{width:100%;height:42px;border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:0 12px;font-weight:600}
+.zrow{gap:8px}
+.zname{flex:1;min-width:0;height:40px;padding:0 8px;font-weight:500;font-size:13.5px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1 1 30%;min-height:52px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer;font-weight:600;line-height:1.2}
+.seg button small{display:block;font-weight:400;font-size:11.5px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg button[aria-pressed="true"] small{color:var(--accent-ink)}
+.chk{width:22px;height:22px;accent-color:var(--accent);flex:none}
+details.group summary{padding:12px;cursor:pointer;font-weight:600}
+details.group[open] summary{border-bottom:1px solid var(--line)}
+
+.note{font-size:13px;color:var(--muted)}
+.warn{background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:10px 12px;font-size:13.5px;font-weight:500}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.kv div{background:var(--panel);padding:10px 12px;min-width:0}
+.kv span{display:block;font-size:12px;color:var(--muted)}
+.kv b{font-family:var(--f-display);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15}
+.kv small{display:block;font-size:12px;color:var(--muted)}
+
+/* Riel DIN: cada columna es un polo */
+.rail{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px;display:grid;grid-template-columns:repeat(12,1fr);gap:3px}
+.mod{border:1px solid var(--ink);border-radius:3px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10.5px;line-height:1.15;text-align:center;overflow:hidden;font-variant-numeric:tabular-nums}
+.mod b{font-family:var(--f-display);font-size:14px}
+.mod.gen{background:var(--ink);color:var(--panel)}
+.mod.dif{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+.mod.free{border:1px dashed var(--line);color:var(--muted);min-height:54px}
+.panel-fig svg{display:block;max-width:100%;height:auto}
+.legend{align-items:center;display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}
+tr:first-child td{border-top:0}
+td.n,th.n{text-align:right;white-space:nowrap}
+.tw{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.sub{font-size:12px;color:var(--muted);display:block}
+.sec-head{display:flex;justify-content:space-between;gap:8px;padding:9px 10px;background:var(--soft);font-weight:600;font-size:13.5px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid var(--muted);vertical-align:-1px;margin-right:7px}
+.c-rojo{background:#D62F2F}.c-negro{background:#161616}.c-azul{background:#2563EB}.c-blanco{background:#FFFFFF}
+.c-verde{background:linear-gradient(90deg,#1E9E4A 50%,#F2D21B 50%)}.c-naranja{background:#F08A1C}
+
+.tot{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.tot div{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.tot div:first-child{border-top:0}
+.tot .grand{background:var(--head);color:var(--head-ink);font-family:var(--f-display);font-size:24px;font-weight:700;border-radius:0 0 5px 5px;align-items:baseline}
+.btn{min-height:46px;border-radius:6px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer;padding:0 16px;width:100%}
+.btn2{background:var(--panel);color:var(--accent);border:1px solid var(--accent)}
+textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:12.5px/1.4 ui-monospace,Consolas,monospace;padding:10px}
+.fx{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.fx b{font-weight:600}
+.fx code{font:600 13.5px/1.4 ui-monospace,Consolas,monospace;color:var(--accent);overflow-wrap:anywhere}
+.fx span{font-size:13px;color:var(--muted)}
+
+.tabs{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs button{flex:1;min-height:54px;border:0;background:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);border-top:3px solid transparent;padding:4px 1px}
+.step button.mini{width:auto;padding:0 10px;font-size:13px}
+.tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="head gut">
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge">v1.0</span></div>
+    <div class="total-row">
+      <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
+      <div class="head-meta" id="h-meta"></div>
+    </div>
+  </header>
+
+  <main class="screen gut" id="screen">
+    <section class="tab" id="t-datos"></section>
+    <section class="tab" id="t-tablero" hidden></section>
+    <section class="tab" id="t-metrado" hidden></section>
+    <section class="tab" id="t-cotiza" hidden></section>
+    <section class="tab" id="t-formulas" hidden></section>
+    <section class="tab" id="t-archivo" hidden></section>
+  </main>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="datos" aria-selected="true">Datos</button>
+    <button role="tab" data-tab="tablero" aria-selected="false">Tablero</button>
+    <button role="tab" data-tab="metrado" aria-selected="false">Metrado</button>
+    <button role="tab" data-tab="cotiza" aria-selected="false">Cotizar</button>
+    <button role="tab" data-tab="formulas" aria-selected="false">Normas</button>
+    <button role="tab" data-tab="archivo" aria-selected="false">Archivo</button>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script>
+/* ---------- Estado (ejemplo cargado) ---------- */
+const DEF = {
+  cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', area:120, pisos:2, dist:15,
+  luz:18, intS:10, conm:2, tomas:22, tomasC:6,
+  ducha:1, therma:0, cocina:0, aire:0, bomba:1, lavadora:0,
+  util:0, igv:false, pozo:true, soloMO:false, modo:'cableado', tabExiste:false,
+  zona:1, zonas:[{n:'Económica: Carabayllo, Comas, SJL',p:25},{n:'Media: Los Olivos, SMP, Cercado',p:30},{n:'Media alta: Surco, Jesús María, Pueblo Libre',p:38},{n:'Exclusiva: Miraflores, San Isidro, La Molina',p:45}],
+  piso:'Piso 1', pp:30, pEsp:90, pAlim:160, pDisp:25, pTubo:50, pLum:0,
+  H:2.5, hInt:1.3, hToma:0.4, hCoc:1.1, hTab:1.7, punta:0.2,
+  auto:true, mLuz:3.4, mToma:2.7, mHome:4.6, mEsp:12, desp:10, maxC:12
+};
+let S = Object.assign({}, DEF);
+try { const g = JSON.parse(localStorage.getItem('cotiz-elec-v2')); if (g) S = Object.assign(S, g); } catch(e){}
+const save = () => { try { localStorage.setItem('cotiz-elec-v2', JSON.stringify(S)); } catch(e){} };
+
+/* ---------- Tablas técnicas (referenciales) ---------- */
+const AMP = [[2.5,18],[4,25],[6,32],[10,44],[16,60],[25,80],[35,100],[50,125]]; // mm², A en tubo
+const ITM = [16,20,25,32,40,50,63,80,100,125];
+const TAB = [4,8,12,18,24,36,48,60];
+const ESP = {
+  ducha:{n:'Ducha eléctrica',w:5500,t:'agua'}, therma:{n:'Therma',w:2000,t:'agua'},
+  cocina:{n:'Cocina eléctrica o de inducción',w:7000,t:'coc'}, aire:{n:'Aire acondicionado',w:1800,t:'ac'},
+  bomba:{n:'Electrobomba 1 HP',w:750,t:'menor'}, lavadora:{n:'Lavaseca o secadora',w:2500,t:'otra'}
+};
+/* Precios de ejemplo en soles: se reemplazan por la lista real del negocio */
+const P = {
+  cable:{2.5:2.1,4:3.3,6:5,10:8.8,16:13.5,25:21,35:29,50:41},
+  tubo20:10, tubo25:15, tubo35:22, curva:1.5, conector:1, octo:3, rect:2.5, pegamento:12,
+  placaInt:25, placaConm:30, toma:30, id40:150, id63:190, pozo:650,
+  tablero:{4:90,8:180,12:280,18:360,24:450,36:620,48:800,60:980},
+  cinta:6, vulc:18, pin:0.3, ojo:3, empalme:1.2, lubricante:15, cintillos:8, peine:25, etiquetas:10,
+  mo:{
+    cableado:{luz:45,int:15,conm:45,toma:40,esp:70,alim:6},
+    completo:{luz:90,int:20,conm:60,toma:80,esp:150,alim:10},
+    tabBase:150, tabPolo:15, pozo:350
+  }
+};
+const itmPrecio = (a,p) => p===2 ? (a<=32?45:a<=63?70:150) : p===3 ? (a<=63?120:260) : (a<=63?160:320);
+const MODO = {cableado:{n:'Solo cableado',c:'Tubos y cajas ya empotrados'}, completo:{n:'Instalación completa',c:'Con tubería y cajas'}};
+
+const SIS = {
+  mono:{n:'Monofásico 220 V',c:'2 hilos',polos:2},
+  tri220:{n:'Trifásico 220 V',c:'3 hilos',polos:3},
+  tri380:{n:'Trifásico 380/220 V',c:'3 fases + neutro',polos:4}
+};
+const next = (arr,v) => arr.find(x => x>=v) || arr[arr.length-1];
+const secFor = a => (AMP.find(x => x[1]>=a) || AMP[AMP.length-1])[0];
+const tierraFor = a => a<=20 ? 2.5 : a<=32 ? 4 : a<=63 ? 6 : 10;
+
+/* ---------- Motor de cálculo ---------- */
+function compute(){
+  const s = S, V = 220, circ = [];
+  const reparte = (total, nombre, wPunto, itm, maxPor, minCirc, k) => {
+    if (total <= 0) return;
+    const n = Math.max(Math.ceil(total/maxPor), Math.min(minCirc, total));
+    for (let i=0;i<n;i++){
+      const pts = Math.floor(total/n) + (i < total%n ? 1 : 0), w = pts*wPunto;
+      circ.push({k, nombre: nombre+(n>1?' '+(i+1):''), det: pts+' puntos', w, i:w/V, itm, sec:secFor(itm), tierra:tierraFor(itm)});
+    }
+  };
+  reparte(s.luz, 'Iluminación', 100, 16, s.maxC, s.pisos, 'L');
+  reparte(s.tomas, 'Tomacorrientes', 180, 20, s.maxC, s.pisos, 'T');
+  reparte(s.tomasC, 'Tomas cocina y lavandería', 180, 20, 6, 1, 'C');
+  let nEsp = 0; const espCirc = [];
+  for (const k in ESP) for (let j=0;j<s[k];j++){
+    const e = ESP[k], i = e.w/V, itm = next(ITM, i*1.25);
+    const c = {nombre:e.n+(s[k]>1?' '+(j+1):''), det:'circuito propio', w:e.w, i, itm, sec:secFor(itm), tierra:tierraFor(itm)};
+    circ.push(c); espCirc.push(c); nEsp++;
+  }
+
+  // Demanda máxima, método CNE-U 050-200
+  const basica = 2500 + (s.area>90 ? Math.ceil((s.area-90)/90)*1000 : 0);
+  const dCoc = s.cocina>0 ? 6000*s.cocina : 0;
+  const dAgua = s.ducha*ESP.ducha.w + s.therma*ESP.therma.w;
+  const dAC = s.aire*ESP.aire.w;
+  const otras = s.lavadora*ESP.lavadora.w;
+  const dOtras = s.cocina>0 ? otras*0.25 : Math.min(otras,6000) + Math.max(otras-6000,0)*0.25;
+  const demanda = basica + dCoc + dAgua + dAC + dOtras;
+
+  const sis = SIS[s.sistema], tri = s.sistema!=='mono', Vn = s.sistema==='tri380' ? 380 : 220;
+  const I = tri ? demanda/(Math.sqrt(3)*Vn) : demanda/Vn;
+  const maxDer = circ.reduce((m,c) => Math.max(m,c.itm), 0);
+  const gen = next(ITM, Math.max(I, maxDer+1, 25));
+  let idx = AMP.findIndex(x => x[1]>=Math.max(gen,40)); if (idx<0) idx = AMP.length-1; // mínimo 40 A, regla 050-200(1)(b)
+  const k = tri ? Math.sqrt(3) : 2;
+  const dv = sec => k*0.0175*s.dist*I/sec/Vn*100;
+  while (dv(AMP[idx][0])>2.5 && idx<AMP.length-1) idx++;
+  const fs = AMP[idx][0], caida = dv(fs), tGen = tierraFor(gen);
+
+  const nID = Math.max(1, Math.ceil(circ.length/4)), idA = gen<=40 ? 40 : 63;
+  const usados = sis.polos + nID*2 + circ.length*2;
+  const tablero = next(TAB, Math.max(12, Math.ceil(usados*1.2))); // mínimo 4 bipolares + 2 de reserva, regla 050-108
+
+  // Metrado de cables por geometría: clave "sección|color"
+  const f = 1 + s.desp/100, cab = {}, p = s.punta;
+  const add = (sec,col,m) => { if (m>0){ const key = sec+'|'+col; cab[key] = (cab[key]||0) + m*f; } };
+  const B = s.sistema==='tri380' ? 'blanco' : 'negro';
+  const nTomas = s.tomas + s.tomasC, cajasInt = s.intS + 2*s.conm;
+  const nC = k => circ.filter(c => c.k===k).length;
+  const subeTab = Math.max(s.H - s.hTab, 0);                 // del tablero al techo
+  const baja = Math.max(s.H - s.hInt, 0) + 0.5*s.mLuz + 2*p;  // del techo al interruptor
+  const troncalL = nC('L')*(s.mHome + subeTab + p) + s.luz*(s.mLuz + 2*p);
+  const troncalT = nC('T')*(s.mHome + s.hTab + p) + s.tomas*(s.mToma + 2*s.hToma + 2*p)
+                 + nC('C')*(s.mHome + s.hTab + p) + s.tomasC*(s.mToma + 2*s.hCoc + 2*p);
+  const lEsp = s.mEsp + 2*p;
+  add(2.5,'rojo', troncalL + (s.intS + s.conm)*baja);
+  add(2.5,B, troncalL);
+  add(2.5,'naranja', s.intS*baja + s.conm*(baja + 2*(2*baja + s.mLuz)));
+  add(2.5,'verde', troncalL + troncalT);
+  add(4,'rojo', troncalT); add(4,B, troncalT);
+  espCirc.forEach(c => { add(c.sec,'rojo',lEsp); add(c.sec,B,lEsp); add(c.tierra,'verde',lEsp); });
+  add(fs,'rojo',s.dist);
+  if (tri){ add(fs,'negro',s.dist); add(fs,'azul',s.dist); if (s.sistema==='tri380') add(fs,'blanco',s.dist); }
+  else add(fs,B,s.dist);
+  add(tGen,'verde',s.dist);
+  const cables = {};
+  Object.keys(cab).forEach(key => { const [sec,col] = key.split('|'); (cables[sec] = cables[sec]||[]).push({col, m:Math.ceil(cab[key])}); });
+
+  const mTubo = troncalL + s.intS*baja + s.conm*(3*baja + s.mLuz) + troncalT + nEsp*lEsp;
+  const tubos = Math.ceil(mTubo/3), tubosAlim = Math.ceil(s.dist/3), dAlim = fs<=10 ? 25 : 35;
+  const rect = cajasInt + nTomas + nEsp;
+  const completo = s.modo==='completo';
+
+  // Lista de materiales
+  const mat = [];
+  let mCable = 0;
+  Object.keys(cables).map(Number).sort((a,b)=>a-b).forEach(sec => {
+    const m = cables[sec].reduce((t,x)=>t+x.m,0); mCable += m;
+    mat.push({g:'Cables', d:'Cable THW-90 BH o libre de halógenos '+sec+' mm²', u:'m', q:m, pu:P.cable[sec]});
+  });
+  if (completo){
+    mat.push({g:'Tubería y cajas', d:'Tubo PVC pesado 20 mm × 3 m', u:'und', q:tubos, pu:P.tubo20});
+    mat.push({g:'Tubería y cajas', d:'Tubo PVC pesado '+dAlim+' mm × 3 m (alimentador)', u:'und', q:tubosAlim, pu:dAlim===25?P.tubo25:P.tubo35});
+    mat.push({g:'Tubería y cajas', d:'Curvas PVC', u:'und', q:tubos+tubosAlim, pu:P.curva});
+    mat.push({g:'Tubería y cajas', d:'Conectores a caja', u:'und', q:(s.luz+rect)*2, pu:P.conector});
+    mat.push({g:'Tubería y cajas', d:'Caja octogonal (luz)', u:'und', q:s.luz, pu:P.octo});
+    mat.push({g:'Tubería y cajas', d:'Caja rectangular', u:'und', q:rect, pu:P.rect});
+    mat.push({g:'Tubería y cajas', d:'Pegamento para PVC', u:'und', q:Math.ceil((tubos+tubosAlim)/30), pu:P.pegamento});
+  }
+  mat.push({g:'Aparatos', d:'Interruptor simple con placa', u:'und', q:s.intS, pu:P.placaInt});
+  mat.push({g:'Aparatos', d:'Interruptor de conmutación con placa', u:'und', q:2*s.conm, pu:P.placaConm});
+  mat.push({g:'Aparatos', d:'Tomacorriente doble con tierra', u:'und', q:nTomas, pu:P.toma});
+  mat.push({g:'Conexión y consumibles', d:'Cinta aislante 19 mm × 18 m', u:'rollo', q:Math.ceil((s.luz+nTomas+cajasInt)/12)+1, pu:P.cinta});
+  mat.push({g:'Conexión y consumibles', d:'Cinta vulcanizante (zonas húmedas y alimentador)', u:'rollo', q:1, pu:P.vulc});
+  mat.push({g:'Conexión y consumibles', d:'Conectores de empalme para cajas de luz', u:'und', q:s.luz*3, pu:P.empalme});
+  mat.push({g:'Conexión y consumibles', d:'Terminales tipo pin para bornes del tablero', u:'und', q:circ.length*3 + nID*4, pu:P.pin});
+  mat.push({g:'Conexión y consumibles', d:'Terminales de compresión para alimentador y tierra', u:'und', q:sis.polos+2, pu:P.ojo});
+  mat.push({g:'Conexión y consumibles', d:'Peine de conexión para tablero', u:'und', q:Math.ceil(usados/12), pu:P.peine});
+  mat.push({g:'Conexión y consumibles', d:'Lubricante para pasar cable', u:'und', q:Math.ceil(mCable/400), pu:P.lubricante});
+  mat.push({g:'Conexión y consumibles', d:'Cintillos de amarre, bolsa de 100', u:'und', q:1, pu:P.cintillos});
+  mat.push({g:'Conexión y consumibles', d:'Etiquetas para identificar circuitos', u:'juego', q:1, pu:P.etiquetas});
+  if (!s.tabExiste) mat.push({g:'Tablero', d:'Tablero empotrado '+tablero+' polos, riel DIN, barra de tierra', u:'und', q:1, pu:P.tablero[tablero]});
+  mat.push({g:'Tablero', d:'Interruptor general '+sis.polos+'×'+gen+' A', u:'und', q:1, pu:itmPrecio(gen,sis.polos)});
+  mat.push({g:'Tablero', d:'Diferencial 2×'+idA+' A, 30 mA', u:'und', q:nID, pu:idA===40?P.id40:P.id63});
+  const porItm = {}; circ.forEach(c => porItm[c.itm] = (porItm[c.itm]||0)+1);
+  Object.keys(porItm).map(Number).sort((a,b)=>a-b).forEach(a => mat.push({g:'Tablero', d:'Interruptor termomagnético 2×'+a+' A', u:'und', q:porItm[a], pu:itmPrecio(a,2)}));
+  if (s.pozo) mat.push({g:'Puesta a tierra', d:'Pozo a tierra: varilla de cobre, cemento conductivo, caja de registro', u:'kit', q:1, pu:P.pozo});
+  const matList = mat.filter(x => x.q>0);
+  const matBase = matList.reduce((t,x)=>t+x.q*x.pu,0);
+  const totMat = s.soloMO ? 0 : matBase;
+
+  // Mano de obra por partidas, como cotiza un electricista: precio por punto y por dispositivo
+  const puntos = s.luz + cajasInt + nTomas, disp = 1 + nID + circ.length;
+  const en = s.piso ? ' ' + s.piso : '';
+  const espNombres = Object.keys(ESP).filter(k => s[k]>0).map(k => ESP[k].n.toLowerCase()).join(', ');
+  const mo = [
+    {d:'Cableado de alimentador eléctrico principal', s:'Cableado y conexionado', q:1, pu:s.pAlim},
+    {d:'Conexionado de tablero eléctrico '+tablero+' polos'+en, s:'Instalación de dispositivos eléctricos y conexión. Incluye mediciones, descarte de fallas y rotulado', q:disp, pu:s.pDisp},
+    {d:'Salida de tomacorrientes'+en, s:'Cableado y conexionado. Incluye instalación de tomacorrientes', q:nTomas, pu:s.pp},
+    {d:'Salida de luminaria'+en, s:'Cableado y conexionado. '+(s.pLum>0 ? 'La instalación de luminarias va en partida aparte' : 'No incluye instalación de luminarias'), q:s.luz, pu:s.pp},
+    {d:'Salida de interruptores'+en, s:'Cableado y conexionado. Incluye instalación de interruptores', q:cajasInt, pu:s.pp},
+    {d:'Alimentador para carga especial'+en, s:'Cableado y conexionado directo del tablero: '+espNombres, q:nEsp, pu:s.pEsp},
+    {d:'Instalación de luminarias'+en, s:'Montaje y conexión de cada luminaria', q:s.pLum>0 ? s.luz : 0, pu:s.pLum},
+    {d:'Entubado y colocación de cajas', s:'Por punto, solo en instalación completa', q:completo ? puntos + nEsp : 0, pu:s.pTubo},
+    {d:'Construcción de pozo a tierra', s:'Excavación, varilla, tratamiento y conexión', q:s.pozo?1:0, pu:P.mo.pozo}
+  ].filter(x => x.q>0);
+  mo.forEach((x,i) => x.c = (i+1) + '.');
+  const totMO = mo.reduce((t,x)=>t+x.q*x.pu,0);
+  const directo = totMat + totMO, utilidad = directo*s.util/100, sub = directo + utilidad;
+  const igv = s.igv ? sub*0.18 : 0, total = sub + igv;
+
+  return {circ, basica, dCoc, dAgua, dAC, dOtras, demanda, I, gen, fs, caida, tGen, nID, idA, usados, tablero, sis, tri,
+    cables, B, mTubo, mCable, baja, completo, tubos, tubosAlim, dAlim, rect, cajasInt, nTomas, nEsp, matList, matBase, totMat, mo, totMO,
+    directo, utilidad, sub, igv, total, puntos, disp};
+}
+
+/* ---------- Utilidades de pantalla ---------- */
+const $ = q => document.querySelector(q);
+const fmt = (n,d=0) => Number(n).toLocaleString('es-PE',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money = n => 'S/ ' + fmt(n,2);
+const esc = t => String(t).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+/* ---------- Pestaña Datos (se dibuja una sola vez) ---------- */
+const F = (k,l,h,u,st,min) => ({k,l,h,u:u||'',st:st||1,min:min||0});
+const GRUPOS = [
+  ['1. Salidas de iluminación', [F('luz','Salidas de luminaria','Cada punto de techo o pared donde va un foco o lámpara'), F('intS','Salidas de interruptor simple','Una luz se enciende desde un solo sitio'), F('conm','Conmutaciones','Una luz que se enciende desde 2 sitios. Cuenta 2 salidas de interruptor')]],
+  ['2. Salidas de tomacorriente', [F('tomas','Tomacorrientes generales','Salas, dormitorios, pasillos'), F('tomasC','Tomacorrientes de cocina y lavandería','Van en circuito independiente')]],
+  ['3. Cargas especiales (directas del tablero)', Object.keys(ESP).map(k => F(k, ESP[k].n, fmt(ESP[k].w)+' W'))],
+  ['5. Otros precios de mano de obra', [F('pEsp','Precio por carga especial','','S/',5,0),
+    F('pAlim','Cableado del alimentador','Precio global','S/',10,0), F('pDisp','Conexión del tablero, por interruptor','Cada interruptor del tablero es un dispositivo: general, diferenciales y uno por circuito','S/',5,0),
+    F('pLum','Instalación de cada luminaria','Opcional. En 0 no se incluye en la cotización','S/',5,0),
+    F('pTubo','Entubado y cajas, por punto','Solo en instalación completa','S/',5,0)]],
+  ['6. Vivienda', [F('area','Área techada total','Suma de todos los pisos','m²',5,20), F('pisos','Número de pisos','', '',1,1), F('dist','Distancia del medidor al tablero','Recorrido real del cable','m',1,1)]]
+];
+const ALTURAS = [F('H','Altura de piso a techo','','m',0.1,2), F('hInt','Altura del interruptor','Práctica en Perú: 1.20 a 1.40 m','m',0.1,0.8),
+  F('hToma','Altura del tomacorriente','Práctica en Perú: 0.40 m','m',0.1,0.2), F('hCoc','Altura de tomas de cocina y lavandería','Sobre la mesa de trabajo: 1.10 m','m',0.1,0.2),
+  F('hTab','Altura del tablero','Ninguna manija a más de 1.70 m (regla 150-402)','m',0.1,1), F('punta','Punta libre de cable en cada caja','Para empalmar y conectar','m',0.1,0.1)];
+const RECORRIDOS = [F('mLuz','Separación entre puntos de luz','Recorrido por el techo','m',0.1,1), F('mToma','Separación entre tomacorrientes','Recorrido por el piso','m',0.1,1),
+  F('mHome','Del tablero al primer punto de cada circuito','','m',0.1,1)];
+const PARAMS = [F('mEsp','Del tablero a cada equipo especial','Ducha, therma, bomba','m',1,1), F('desp','Desperdicio','','%',1,0), F('maxC','Máximo de puntos por circuito','','',1,4)];
+const fila = f => `<div class="row"><label class="lbl" for="f-${f.k}"><b>${f.l}</b>${f.h?`<span class="hint">${f.h}</span>`:''}</label>
+  <div class="step"><button type="button" data-step="-1" data-k="${f.k}" aria-label="Restar">−</button>
+  <input id="f-${f.k}" type="number" inputmode="${f.st<1?'decimal':'numeric'}" step="${f.st}" data-k="${f.k}" data-min="${f.min}" data-st="${f.st}" value="${S[f.k]}">
+  <button type="button" data-step="1" data-k="${f.k}" aria-label="Sumar">+</button><span class="unit">${f.u}</span></div></div>`;
+
+function drawDatos(){
+  $('#t-datos').innerHTML = `
+  <div><h2>Obra</h2><div class="tab" style="gap:8px"><input class="text-in" id="f-cliente" data-text="cliente" value="${esc(S.cliente)}" aria-label="Cliente u obra">
+    <input class="text-in" id="f-piso" data-text="piso" value="${esc(S.piso)}" placeholder="Piso o sector, por ejemplo Piso 2" aria-label="Piso o sector que se cotiza"></div></div>
+  <div><h2>Tipo de trabajo</h2><div class="seg" id="seg-modo">${Object.keys(MODO).map(k => `<button type="button" data-modo="${k}" aria-pressed="${S.modo===k}">${MODO[k].n}<small>${MODO[k].c}</small></button>`).join('')}</div></div>
+  <div><h2>Tipo de suministro</h2><div class="seg" id="seg-sis">${Object.keys(SIS).map(k => `<button type="button" data-sis="${k}" aria-pressed="${S.sistema===k}">${SIS[k].n}<small>${SIS[k].c}</small></button>`).join('')}</div></div>
+  ${GRUPOS.map((g,i) => (i===3 ? `<div><h2>4. Precio por punto según la zona</h2><div class="group">${S.zonas.map((z,j) => `<div class="row zrow">
+      <input class="chk" type="radio" name="zona" id="z-sel-${j}" data-zsel="${j}" ${S.zona===j?'checked':''} aria-label="Usar esta zona">
+      <input class="text-in zname" id="z-n-${j}" data-zn="${j}" value="${esc(z.n)}" aria-label="Nombre de la zona ${j+1}">
+      <div class="step"><button type="button" data-zstep="-5" data-zi="${j}" aria-label="Bajar precio">−</button>
+      <input id="z-p-${j}" type="number" inputmode="numeric" data-zp="${j}" value="${z.p}" aria-label="Precio por punto en soles">
+      <button type="button" data-zstep="5" data-zi="${j}" aria-label="Subir precio">+</button></div></div>`).join('')}</div>
+    <p class="note" id="z-nota"></p></div>` : '') + `<div><h2>${g[0]}</h2><div class="group">${g[1].map(fila).join('')}</div></div>`).join('')}
+  <div><h2>Condiciones de la cotización</h2><div class="group">
+    ${fila(F('util','Utilidad y gastos generales','','%',1,0))}
+    <div class="row"><label class="lbl" for="f-pozo"><b>Incluir pozo a tierra</b><span class="hint">Obligatorio si la vivienda no tiene uno</span></label><input class="chk" type="checkbox" id="f-pozo" data-chk="pozo" ${S.pozo?'checked':''}></div>
+    <div class="row"><label class="lbl" for="f-igv"><b>Agregar IGV 18 %</b></label><input class="chk" type="checkbox" id="f-igv" data-chk="igv" ${S.igv?'checked':''}></div>
+    <div class="row"><label class="lbl" for="f-tabExiste"><b>La caja del tablero ya está empotrada</b><span class="hint">Solo se ponen los interruptores</span></label><input class="chk" type="checkbox" id="f-tabExiste" data-chk="tabExiste" ${S.tabExiste?'checked':''}></div>
+  </div></div>
+  <div><h2>Alturas de montaje</h2><div class="group">${ALTURAS.map(fila).join('')}</div></div>
+  <div><h2>Recorridos del cable</h2><div class="group">
+    <div class="row"><label class="lbl" for="f-auto"><b>Estimar según el área y la cantidad de puntos</b><span class="hint">Desactívalo para escribir tus propias medidas</span></label><input class="chk" type="checkbox" id="f-auto" data-chk="auto" ${S.auto?'checked':''}></div>
+    ${RECORRIDOS.map(fila).join('')}${PARAMS.map(fila).join('')}
+  </div></div>
+  <p class="note">Los datos cargados son un ejemplo. Cámbialos y el total de arriba se actualiza al instante.</p>`;
+}
+
+/* ---------- Dibujo del tablero (colores fijos: es la ilustración de un objeto real) ---------- */
+function dibujaTablero(c){
+  const W = 26, PR = 12, x0 = 30, rowH = 150, top = 34, MH = 78;
+  const HEX = {rojo:'#D62F2F', negro:'#161616', azul:'#2563EB', blanco:'#FFFFFF', verde:'#1E9E4A'};
+  // Orden real: general arriba, termomagnéticos al medio, diferenciales abajo
+  const items = []; let col = 0, row = 0, nFree = c.tablero - c.usados;
+  const put = m => { if (col+m.p>PR){ row++; col = 0; } m.x = x0+col*W; m.r = row; col += m.p; items.push(m); };
+  const fila = () => { if (col>0){ row++; col = 0; } };
+  put({t:'gen', p:c.sis.polos, a:c.gen, l:'General'});
+  while (nFree>0 && col<PR){ put({t:'free', p:1}); nFree--; }
+  fila(); c.circ.forEach((x,i) => put({t:'c', p:2, a:x.itm, l:'C'+(i+1)}));
+  fila(); for (let i=0;i<c.nID;i++) put({t:'dif', p:2, a:c.idA, l:'Dif. '+(i+1)});
+  while (nFree>0){ put({t:'free', p:1}); nFree--; }
+  const rows = row+1, VW = x0*2+PR*W, yBar = top+rows*rowH+4, VH = yBar+50;
+  const wire = (x1,y1,x2,y2,col) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4B5563" stroke-width="5" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${HEX[col]}" stroke-width="3" stroke-linecap="round"/>`;
+  const fases = c.sis.polos===2 ? ['rojo',c.B] : c.sis.polos===3 ? ['rojo','negro','azul'] : ['rojo','negro','azul','blanco'];
+  let o = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" role="img" aria-label="Dibujo del tablero con ${c.tablero} polos" font-family="inherit">
+    <rect x="2" y="2" width="${VW-4}" height="${VH-4}" rx="9" fill="#C3CCD7" stroke="#6F7B8A" stroke-width="2"/>
+    <rect x="11" y="11" width="${VW-22}" height="${VH-22}" rx="4" fill="#EBEEF3" stroke="#9AA6B5"/>`;
+  for (let r=0;r<rows;r++){
+    const y = top+r*rowH+10, enFila = items.filter(m => m.r===r && m.t!=='free');
+    o += `<rect x="${x0-9}" y="${y+28}" width="${PR*W+18}" height="22" fill="#B4BDC9" stroke="#7C8794"/>`;
+    for (let h=0;h<PR;h++) o += `<rect x="${x0+h*W+8}" y="${y+35}" width="10" height="8" rx="4" fill="#EBEEF3" stroke="#7C8794" stroke-width=".7"/>`;
+    const conPeine = enFila.filter(m => m.t!=='gen');
+    if (conPeine.length){ const a = conPeine[0].x+4, b = conPeine[conPeine.length-1]; o += `<rect x="${a}" y="${y-5}" width="${b.x+b.p*W-4-a}" height="6" rx="1.5" fill="#C9772C" stroke="#8A4E17" stroke-width=".8"/>`; }
+  }
+  items.forEach(m => {
+    const y = top+m.r*rowH+10, cx = i => m.x+i*W+W/2, mid = m.x+m.p*W/2;
+    if (m.t==='free'){ o += `<rect x="${m.x+2}" y="${y}" width="${W-4}" height="${MH}" rx="2" fill="none" stroke="#8A95A3" stroke-dasharray="4 3"/>`; return; }
+    if (m.t==='gen') fases.forEach((col,i) => o += wire(cx(i), 12, cx(i), y+6, col));
+    if (m.t==='c'){ o += wire(cx(0), y+MH-8, cx(0), y+MH+22, 'rojo') + wire(cx(1), y+MH-8, cx(1), y+MH+22, c.B); }
+    if (m.t==='dif'){
+      o += `<rect x="${m.x+1}" y="${y}" width="${m.p*W-2}" height="${MH}" rx="2.5" fill="#F7F8FA" stroke="#566170"/>
+        <rect x="${m.x+7}" y="${y+33}" width="15" height="11" rx="2" fill="#E8892B" stroke="#8A4E17" stroke-width=".8"/><text x="${m.x+14.5}" y="${y+41.5}" font-size="8" font-weight="700" text-anchor="middle" fill="#3B2408">T</text>
+        <rect x="${m.x+W+6}" y="${y+30}" width="12" height="18" rx="2" fill="#B3261E"/>
+        <text x="${mid}" y="${y+60}" font-size="8.5" text-anchor="middle" fill="#1B2430">30 mA</text>`;
+    } else {
+      for (let i=0;i<m.p;i++) o += `<rect x="${m.x+i*W+1}" y="${y}" width="${W-2}" height="${MH}" rx="2.5" fill="#F7F8FA" stroke="#566170"/><rect x="${cx(i)-5}" y="${y+30}" width="10" height="18" rx="2" fill="${m.t==='gen'?'#12233F':'#2F3B4D'}"/>`;
+      o += `<rect x="${cx(0)-5}" y="${y+35}" width="${(m.p-1)*W+10}" height="6" rx="1.5" fill="${m.t==='gen'?'#12233F':'#2F3B4D'}"/>`;
+    }
+    for (let i=0;i<m.p;i++) o += `<circle cx="${cx(i)}" cy="${y+8}" r="3.4" fill="#A3ACB8" stroke="#566170" stroke-width=".8"/><circle cx="${cx(i)}" cy="${y+MH-8}" r="3.4" fill="#A3ACB8" stroke="#566170" stroke-width=".8"/>`;
+    o += `<text x="${mid}" y="${y+24}" font-size="10" font-weight="700" text-anchor="middle" fill="#1B2430">${m.a} A</text>`;
+    o += `<text x="${mid}" y="${y+MH+(m.t==='c'?36:16)}" font-size="${m.t==='c'?11.5:9.5}" font-weight="700" text-anchor="middle" fill="#1B2430">${m.l}</text>`;
+  });
+  const nT = Math.min(c.circ.length+1, 9);
+  o += `<rect x="${x0}" y="${yBar}" width="150" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>`;
+  for (let i=0;i<9;i++) o += `<circle cx="${x0+13+i*15.5}" cy="${yBar+6.5}" r="3" fill="#F3E3A1" stroke="#8C7420" stroke-width=".8"/>`;
+  for (let i=0;i<nT;i++) o += wire(x0+13+i*15.5, yBar+9, x0+13+i*15.5, yBar+34, 'verde');
+  o += `<text x="${x0+162}" y="${yBar+11}" font-size="10.5" font-weight="700" fill="#1B2430">Barra de tierra</text></svg>`;
+  return o;
+}
+
+/* ---------- Pestañas de resultados ---------- */
+function drawTablero(c){
+  const avisos = [];
+  if (S.sistema==='mono' && c.demanda>10000) avisos.push('La demanda supera 10 kW. Consulta con la concesionaria un suministro trifásico.');
+  if (c.caida>2.5) avisos.push('La caída de tensión del alimentador supera 2.5 % incluso con el cable más grueso de la tabla. Revisa la distancia.');
+  if (c.tri) avisos.push('En tablero trifásico, reparte los circuitos entre las fases para equilibrar la carga.');
+  $('#t-tablero').innerHTML = `
+  ${avisos.map(a => `<div class="warn">${a}</div>`).join('')}
+  <div><h2>Resumen eléctrico</h2><div class="kv">
+    <div><span>Demanda máxima</span><b>${fmt(c.demanda/1000,2)} kW</b><small>${c.sis.n}</small></div>
+    <div><span>Corriente de diseño</span><b>${fmt(c.I,1)} A</b><small>por fase</small></div>
+    <div><span>Interruptor general</span><b>${c.sis.polos}×${c.gen} A</b><small>termomagnético</small></div>
+    <div><span>Alimentador</span><b>${c.sis.polos}×${c.fs} mm²</b><small>+ tierra ${c.tGen} mm² · caída ${fmt(c.caida,2)} %</small></div>
+    <div><span>Tablero</span><b>${c.tablero} polos</b><small>${c.usados} usados, ${c.tablero-c.usados} de reserva</small></div>
+    <div><span>Diferenciales 30 mA</span><b>${c.nID} × 2×${c.idA} A</b><small>uno por grupo de circuitos</small></div>
+  </div></div>
+  <div><h2>Así queda el tablero</h2><div class="panel-fig">${dibujaTablero(c)}</div>
+    <div class="legend"><span><span class="dot c-rojo"></span>Fase</span><span><span class="dot c-${c.B}"></span>${c.B==='blanco'?'Neutro':'Fase 2'}</span><span><span class="dot c-verde"></span>Tierra</span><span>Punteado = espacio de reserva</span></div>
+    <p class="note">${Array.from({length:c.nID}, (_,g) => { const n = Math.ceil(c.circ.length/c.nID), a = g*n+1, b = Math.min((g+1)*n, c.circ.length); return a<=b ? 'Dif. '+(g+1)+' protege '+(a===b ? 'C'+a : 'C'+a+' a C'+b) : ''; }).filter(Boolean).join('. ')}.</p></div>
+  <div><h2>Cuadro de circuitos</h2><div class="tw"><table>
+    <tr><th>Circuito</th><th class="n">Carga</th><th class="n">ITM</th><th class="n">Cable</th></tr>
+    ${c.circ.map((x,i) => `<tr><td>C${i+1} · ${x.nombre}<span class="sub">${x.det} · ${fmt(x.i,1)} A</span></td><td class="n">${fmt(x.w)} W</td><td class="n">2×${x.itm} A</td><td class="n">${x.sec} mm²<span class="sub">T ${x.tierra}</span></td></tr>`).join('')}
+  </table></div></div>
+  <div><h2>Cómo sale la demanda</h2><div class="tot">
+    <div><span>Carga básica por área (${fmt(S.area)} m²)</span><span>${fmt(c.basica)} W</span></div>
+    ${c.dCoc?`<div><span>Cocina eléctrica</span><span>${fmt(c.dCoc)} W</span></div>`:''}
+    ${c.dAgua?`<div><span>Calentadores de agua al 100 %</span><span>${fmt(c.dAgua)} W</span></div>`:''}
+    ${c.dAC?`<div><span>Aire acondicionado al 100 %</span><span>${fmt(c.dAC)} W</span></div>`:''}
+    ${c.dOtras?`<div><span>Otras cargas mayores a 1 500 W</span><span>${fmt(c.dOtras)} W</span></div>`:''}
+    <div><b>Demanda máxima</b><b>${fmt(c.demanda)} W</b></div>
+  </div><p class="note">Iluminación, tomacorrientes y cargas menores a 1 500 W ya están dentro de la carga básica por área.</p></div>`;
+}
+
+function drawMetrado(c){
+  const fn = {rojo:'Fase L1 · rojo', negro:'Fase L2 · negro', azul:'Fase L3 · azul', blanco:'Neutro · blanco', verde:'Tierra · verde/amarillo', naranja:'Retorno de interruptor · naranja'};
+  const secs = Object.keys(c.cables).map(Number).sort((a,b)=>a-b);
+  const grupos = ['Conexión y consumibles','Aparatos','Tablero','Tubería y cajas','Puesta a tierra'];
+  $('#t-metrado').innerHTML = `
+  <div><h2>Cables por sección y color</h2><div class="tw">
+    ${secs.map(sec => { const tot = c.cables[sec].reduce((t,x)=>t+x.m,0);
+      const awg = {2.5:' (14 AWG)',4:' (12 AWG)',6:' (10 AWG)',10:' (8 AWG)',16:' (6 AWG)'}[sec] || '';
+      return `<div class="sec-head"><span>Cable ${sec} mm²${awg}</span><span>${fmt(tot)} m · ${sec<=6 ? Math.ceil(tot/100)+' rollo(s) de 100 m' : 'por metro'}</span></div>
+      <table>${c.cables[sec].map(x => `<tr><td><span class="dot c-${x.col}"></span>${fn[x.col]}</td><td class="n">${fmt(x.m)} m</td></tr>`).join('')}</table>`; }).join('')}
+  </div><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
+  ${grupos.map(g => { const it = c.matList.filter(x => x.g===g); return it.length ? `<div><h2>${g}</h2><div class="tw"><table>
+    ${it.map(x => `<tr><td>${x.d}</td><td class="n">${fmt(x.q)} ${x.u}</td></tr>`).join('')}</table></div></div>` : ''; }).join('')}
+  <div><h2>Herramientas para el cableado</h2><div class="tw"><table>
+    <tr><td>Wincha pasacable de 30 m (de fibra o nylon si hay circuitos con tensión)</td></tr>
+    <tr><td>Pelacables, alicate de corte y alicate de punta</td></tr>
+    <tr><td>Prensa terminales</td></tr>
+    <tr><td>Multímetro y probador de tensión</td></tr>
+    <tr><td>Megóhmetro para la prueba de aislamiento final</td></tr>
+  </table></div><p class="note">Las herramientas no se suman a la cotización.</p></div>
+  <p class="note">${c.completo ? 'Tubería estimada: '+fmt(c.mTubo)+' m de 20 mm para circuitos derivados y '+fmt(S.dist)+' m de '+c.dAlim+' mm para el alimentador.' : 'Modo solo cableado: no se cuentan tubos ni cajas porque ya están empotrados. Total de cable: '+fmt(c.mCable)+' m. Si algún tubo está obstruido, ese punto se cotiza aparte.'}</p>`;
+}
+
+/* Vista para el cliente: precios tal como se escriben. El IGV sale como línea final solo si está marcado.
+   Si hay utilidad mayor a 0, va repartida dentro de cada precio y no aparece como línea. */
+function paraCliente(c){
+  const k = 1 + S.util/100, r2 = n => Math.round(n*100)/100;
+  const fila = x => { const pu = r2(x.pu*k); return Object.assign({}, x, {pu, par:r2(x.q*pu)}); };
+  const mo = c.mo.map(fila), mat = S.soloMO ? [] : c.matList.map(fila);
+  const totMO = r2(mo.reduce((t,x)=>t+x.par,0)), totMat = r2(mat.reduce((t,x)=>t+x.par,0));
+  const sub = r2(totMO+totMat), igv = S.igv ? r2(sub*0.18) : 0;
+  return {mo, mat, totMO, totMat, sub, igv, total:r2(sub+igv)};
+}
+function textoCotizacion(c){
+  const L = ['COTIZACIÓN - '+(c.completo ? 'INSTALACIÓN ELÉCTRICA COMPLETA' : 'CABLEADO ELÉCTRICO (tubería existente)'), 'Obra: '+S.cliente, c.sis.n+' · '+fmt(S.area)+' m² · '+S.pisos+' piso(s)', '',
+    'ALCANCE', '- '+S.luz+' puntos de luz, '+c.cajasInt+' interruptores', '- '+c.nTomas+' tomacorrientes dobles con tierra',
+    '- '+c.nEsp+' circuito(s) especial(es)', '- Tablero de '+c.tablero+' polos, general '+c.sis.polos+'x'+c.gen+' A, '+c.nID+' diferencial(es) 30 mA',
+    '- Alimentador '+c.sis.polos+'x'+c.fs+' mm² + tierra, '+S.dist+' m'];
+  if (S.pozo) L.push('- Pozo a tierra');
+  L.push('', 'MANO DE OBRA POR PARTIDAS');
+  const v = paraCliente(c);
+  v.mo.forEach(x => L.push(x.c+' '+x.d+': '+fmt(x.q)+' x '+money(x.pu)+' = '+money(x.par), '     ('+x.s+')'));
+  L.push('', 'PRECIO', 'Mano de obra: '+money(v.totMO));
+  if (!S.soloMO) L.push('Materiales: '+money(v.totMat));
+  if (S.igv) L.push('Subtotal: '+money(v.sub), 'IGV 18 %: '+money(v.igv));
+  L.push('TOTAL: '+money(v.total), '', S.soloMO ? 'No incluye materiales.' : 'Incluye materiales y mano de obra.', 'Precios referenciales, sujetos a visita técnica.');
+  return L.join('\n');
+}
+
+/* ---------- PDF de la cotización ---------- */
+const PUEDE_COMPARTIR = !!(navigator.share && navigator.canShare);
+let NEG = {nombre:'', tel:'', ruc:''}, LISTA = [];
+try { Object.assign(NEG, JSON.parse(localStorage.getItem('cotiz-negocio')) || {}); LISTA = JSON.parse(localStorage.getItem('cotiz-lista')) || []; } catch(e){}
+const guarda = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } };
+function generaPDF(c){
+  const doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'}), v = paraCliente(c);
+  const W = doc.internal.pageSize.getWidth(), mx = 14; let y = 18;
+  if (NEG.nombre || NEG.tel || NEG.ruc){
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(NEG.nombre || 'Servicios eléctricos', mx, 14);
+    const contacto = [NEG.tel && 'Tel. '+NEG.tel, NEG.ruc && 'RUC '+NEG.ruc].filter(Boolean).join('    ');
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); if (contacto) doc.text(contacto, mx, 19);
+    doc.setDrawColor(180); doc.line(mx, 22, W-mx, 22); y = 31;
+  }
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('COTIZACIÓN', mx, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text('Fecha: '+new Date().toLocaleDateString('es-PE'), W-mx, y, {align:'right'});
+  y += 7; doc.setFontSize(11); doc.text(c.completo ? 'Instalación eléctrica completa' : 'Cableado eléctrico con tubería existente', mx, y);
+  y += 8; doc.setFontSize(10);
+  [['Obra', S.cliente + (S.piso ? ' - ' + S.piso : '')], ['Alcance', S.soloMO ? 'Solo mano de obra' : 'Mano de obra y materiales, por separado'],
+   ['Datos', fmt(S.area)+' m², '+c.sis.n+', '+c.puntos+' puntos, tablero de '+c.tablero+' polos']]
+    .forEach(r => { doc.setFont('helvetica','bold'); doc.text(r[0]+':', mx, y); doc.setFont('helvetica','normal'); doc.text(String(r[1]), mx+20, y, {maxWidth:W-2*mx-20}); y += 5.5; });
+  const base = {margin:{left:mx,right:mx}, styles:{fontSize:9, cellPadding:1.8}, headStyles:{fillColor:[18,35,63], textColor:255, fontStyle:'bold'},
+    footStyles:{fillColor:[226,235,250], textColor:[20,35,59], fontStyle:'bold'}, columnStyles:{0:{cellWidth:12}}, showFoot:'lastPage',
+    didParseCell: d => { if (d.column.index>=2) d.cell.styles.halign = 'right'; }};
+  doc.autoTable(Object.assign({}, base, {startY:y+3,
+    head:[['Ítem','Mano de obra','Cant.','P. unit. S/','Parcial S/']],
+    body:v.mo.map(x => [x.c, x.d+'\n'+x.s, fmt(x.q), fmt(x.pu,2), fmt(x.par,2)]),
+    foot:[['','Total mano de obra','','',fmt(v.totMO,2)]]}));
+  if (!S.soloMO) doc.autoTable(Object.assign({}, base, {startY:doc.lastAutoTable.finalY+8,
+    head:[['Ítem','Materiales','Cant.','P. unit. S/','Parcial S/']],
+    body:v.mat.map((x,i) => [(i+1)+'.', x.d, fmt(x.q)+' '+x.u, fmt(x.pu,2), fmt(x.par,2)]),
+    foot:[['','Total materiales','','',fmt(v.totMat,2)]]}));
+  const res = [];
+  if (!S.soloMO) res.push(['Mano de obra', money(v.totMO)], ['Materiales', money(v.totMat)]);
+  if (S.igv) res.push(['Subtotal', money(v.sub)], ['IGV 18 %', money(v.igv)]);
+  res.push(['TOTAL', money(v.total)]);
+  doc.autoTable({startY:doc.lastAutoTable.finalY+8, margin:{left:W-mx-90, right:mx}, theme:'plain', styles:{fontSize:10, cellPadding:1.6}, body:res, pageBreak:'avoid',
+    didParseCell: d => { if (d.column.index===1) d.cell.styles.halign = 'right';
+      if (d.row.index===res.length-1){ d.cell.styles.fontStyle = 'bold'; d.cell.styles.fontSize = 12; d.cell.styles.fillColor = [18,35,63]; d.cell.styles.textColor = 255; } }});
+  y = doc.lastAutoTable.finalY + 9;
+  if (y > 262){ doc.addPage(); y = 20; }
+  doc.setFontSize(8.5); doc.setTextColor(90);
+  doc.text(['Incluye limpieza de cajas antes de cablear, pruebas del tablero y rotulado de circuitos.',
+    S.soloMO ? 'No incluye materiales: los compra el cliente según la lista de metrado.' : 'Los materiales se cotizan aparte de la mano de obra, con precios referenciales.',
+    'Precios sujetos a visita técnica. Tubos obstruidos o trabajos de albañilería se cotizan aparte.'], mx, y);
+  return doc.output('arraybuffer');
+}
+async function descargaPDF(compartir){
+  const msg = $('#pdf-msg'), say = t => { if (msg) msg.textContent = t; };
+  if (!window.jspdf) return say('Falta la librería de PDF. Abre la app una vez con internet para que quede guardada.');
+  try {
+    const nombre = 'cotizacion-' + (S.cliente || 'electrica').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40) + '.pdf';
+    const file = new File([generaPDF(compute())], nombre, {type:'application/pdf'});
+    if (compartir && PUEDE_COMPARTIR && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:'Cotización eléctrica'});
+      return say('PDF enviado.');
+    }
+    const url = URL.createObjectURL(file), a = document.createElement('a');
+    a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    say('PDF descargado: ' + nombre);
+  } catch(e){
+    say(e && e.name==='AbortError' ? 'Envío cancelado.' : 'No se pudo generar el PDF.');
+  }
+}
+
+function drawCotiza(c){
+  $('#t-cotiza').innerHTML = `
+  <div><h2>Tipo de cotización</h2><div class="seg">
+    <button type="button" data-tipo="mo" aria-pressed="${S.soloMO}">Solo mano de obra<small>El cliente compra los materiales</small></button>
+    <button type="button" data-tipo="full" aria-pressed="${!S.soloMO}">Mano de obra y materiales<small>Cada uno con su total</small></button>
+  </div></div>
+  <div class="group"><div class="row"><label class="lbl" for="c-igv"><b>Incluir IGV 18 %</b><span class="hint">Marcado: sale como línea al final. Sin marcar: precios normales, sin IGV</span></label><input class="chk" type="checkbox" id="c-igv" data-chk="igv" ${S.igv?'checked':''}></div></div>
+  <div><h2>Resumen interno</h2><div class="tot">
+    ${S.soloMO ? '' : `<div><span>Materiales</span><span>${money(c.totMat)}</span></div>`}
+    <div><span>Mano de obra</span><span>${money(c.totMO)}</span></div>
+    <div><span>Utilidad y gastos generales (${S.util} %)</span><span>${money(c.utilidad)}</span></div>
+    <div><span>Subtotal</span><span>${money(c.sub)}</span></div>
+    ${S.igv ? `<div><span>IGV 18 %</span><span>${money(c.igv)}</span></div>` : ''}
+    <div class="grand"><span>Total</span><span>${money(c.total)}</span></div>
+  </div></div>
+  <div class="kv">
+    <div><span>Costo por m²</span><b>${money(c.total/S.area)}</b></div>
+    <div><span>Costo por punto</span><b>${c.puntos ? money(c.total/c.puntos) : '-'}</b><small>${c.puntos} puntos en total</small></div>
+  </div>
+  <button class="btn" type="button" id="btn-pdf">Descargar cotización en PDF</button>
+  ${PUEDE_COMPARTIR ? `<button class="btn" type="button" id="btn-share">Enviar PDF por WhatsApp u otra app</button>` : ''}
+  <p class="note" id="pdf-msg">${(S.util>0 ? 'El PDF no muestra la utilidad de '+S.util+' %: va dentro de cada precio. Ponla en 0 para que salgan tus precios exactos. ' : 'El PDF sale con tus precios exactos. ') + (S.igv ? 'El IGV aparece como línea al final.' : 'Sin IGV.')}</p>
+  <button class="btn btn2" type="button" id="btn-copy">Copiar cotización como texto</button>
+  <textarea id="copy-out" hidden readonly aria-label="Texto de la cotización"></textarea>
+  <div><h2>Mano de obra por partidas</h2><div class="tw"><table>
+    <tr><th>Ítem · Instalaciones eléctricas</th><th class="n">Cant.</th><th class="n">P. unit.</th><th class="n">Parcial</th></tr>
+    ${c.mo.map(x => `<tr><td><b>${x.c}</b> ${esc(x.d)}<span class="sub">${esc(x.s)}</span></td><td class="n">${fmt(x.q)}</td><td class="n">${fmt(x.pu,2)}</td><td class="n">${fmt(x.q*x.pu,2)}</td></tr>`).join('')}
+    <tr><td><b>Total mano de obra</b></td><td class="n"></td><td class="n"></td><td class="n"><b>${fmt(c.totMO,2)}</b></td></tr>
+  </table></div><p class="note">Precio por punto de la zona "${esc(S.zonas[S.zona].n)}": S/ ${S.pp}. Incluye la limpieza de cajas rectangulares y octogonales antes de cablear, las pruebas del tablero y el rotulado de cada circuito.</p></div>
+  ${S.soloMO ? '' : `<div><h2>Materiales</h2><div class="tw"><table>
+    <tr><th>Material</th><th class="n">Cant.</th><th class="n">P. unit.</th><th class="n">Parcial</th></tr>
+    ${c.matList.map(x => `<tr><td>${x.d}</td><td class="n">${fmt(x.q)} ${x.u}</td><td class="n">${fmt(x.pu,2)}</td><td class="n">${fmt(x.q*x.pu,2)}</td></tr>`).join('')}
+  </table></div></div>`}
+  <p class="note">Precios de ejemplo tomados de rangos publicados para Lima en 2026. En la app final se editan desde una lista de precios propia.</p>`;
+}
+
+function drawFormulas(c){
+  const fx = (t,code,txt) => `<div class="fx"><b>${t}</b><code>${code}</code><span>${txt}</span></div>`;
+  $('#t-formulas').innerHTML = `
+  <div><h2>Criterios de cálculo</h2><div class="tab" style="gap:8px">
+  ${fx('1. Carga básica por área','2 500 W + 1 000 W × cada 90 m² adicionales','Código Nacional de Electricidad, Utilización, regla 050-200. Con '+fmt(S.area)+' m² resulta '+fmt(c.basica)+' W. El alimentador nunca baja de 40 A de capacidad.')}
+  ${fx('2. Demanda máxima','Básica + cocina 6 000 W + calentadores 100 % + aire 100 % + otras cargas','Otras cargas mayores a 1 500 W: 100 % hasta 6 000 W y 25 % del resto. Si hay cocina eléctrica, 25 % de todas. Resultado: '+fmt(c.demanda)+' W.')}
+  ${fx('3. Corriente','Monofásico: I = P ÷ V &nbsp;·&nbsp; Trifásico: I = P ÷ (1.732 × V)','V = 220 V, o 380 V entre fases en el sistema 380/220. Resultado: '+fmt(c.I,1)+' A.')}
+  ${fx('4. Interruptor de cada circuito','ITM ≥ 1.25 × I de la carga &nbsp;y&nbsp; ITM ≤ capacidad del cable','Iluminación 16 A con 2.5 mm². Tomacorrientes 20 A con 4 mm². Tamaños comerciales: 16, 20, 25, 32, 40, 50, 63 A.')}
+  ${fx('5. Capacidad de cables en tubo','2.5→18 A · 4→25 A · 6→32 A · 10→44 A · 16→60 A · 25→80 A','Valores conservadores para cobre. La sección mínima en circuitos derivados es 2.5 mm².')}
+  ${fx('6. Caída de tensión','ΔV = k × 0.0175 × L × I ÷ S','k = 2 en monofásico y 1.732 en trifásico. L en metros, S en mm². Límite: 2.5 % en el alimentador y 4 % hasta el punto más lejano (regla 050-102). Alimentador actual: '+fmt(c.caida,2)+' %.')}
+  ${fx('7. Número de circuitos','Circuitos = puntos ÷ '+S.maxC+', redondeado hacia arriba','Mínimo un circuito de luz y uno de tomacorrientes por piso. Cocina y lavandería van aparte, con 6 tomas como máximo.')}
+  ${fx('8. Polos del tablero','(General + diferenciales + circuitos × 2) × 1.20','20 % de reserva y tamaño comercial siguiente. Mínimo 12 polos: 4 interruptores bipolares más 2 de reserva (regla 050-108).')}
+  ${fx('9. Alturas de montaje','Tablero ≤ 1.70 m · Interruptor '+fmt(S.hInt,2)+' m · Tomacorriente '+fmt(S.hToma,2)+' m · Cocina '+fmt(S.hCoc,2)+' m','El Código solo fija la del tablero (regla 150-402). Las de interruptores y tomacorrientes son práctica de planos peruanos y se pueden cambiar.')}
+  ${fx('10. Cable de iluminación, por el techo','Por circuito: recorrido al primer punto + (techo − tablero) + punta<br>Por punto: separación + 2 puntas','Tres conductores: fase, neutro o segunda fase, y tierra. Separación estimada = 1.3 × √(área ÷ puntos).')}
+  ${fx('11. Cable al interruptor','Bajada = (techo − interruptor) + media separación + 2 puntas','Con las alturas actuales: '+fmt(c.baja,2)+' m. Interruptor simple: fase y retorno. Conmutación: fase, retorno y dos viajeros entre los dos interruptores.')}
+  ${fx('12. Cable de tomacorrientes, por el piso','Por circuito: recorrido al primer punto + altura del tablero + punta<br>Por toma: separación + 2 × altura de la toma + 2 puntas','Fase y neutro o segunda fase en 4 mm², tierra en 2.5 mm².')}
+  ${fx('13. Colores de conductores','Fases: rojo (R), negro (S), azul (T) · Neutro: blanco o gris · Tierra: verde o verde/amarillo','Regla 030-036. En monofásico de dos conductores: negro y rojo, o negro y blanco.')}
+  ${fx('14. Mano de obra','Puntos × precio por punto + cargas especiales + alimentador + dispositivos del tablero','Punto = cada salida de luminaria, interruptor o tomacorriente. Dispositivo = cada termomagnético o diferencial. Ahora: '+c.puntos+' puntos y '+c.disp+' dispositivos.')}
+  ${fx('15. Equivalencia de calibres','14 AWG ≈ 2.5 mm² · 12 AWG ≈ 4 mm² · 10 AWG ≈ 6 mm²','Alumbrado y tierra en 14 AWG, tomacorrientes en 12 AWG, alimentador de un piso desde 10 AWG.')}
+  ${fx('16. Protección de personas','Diferencial de 30 mA + puesta a tierra ≤ 25 Ω','Reglas 020-132 y 060-712. Un termomagnético por circuito (150-400). Sección mínima 2.5 mm² (030-002).')}
+  </div></div>
+  <div class="warn">Herramienta de presupuesto rápido. Las reglas se tomaron de fuentes que citan el Código Nacional de Electricidad, Utilización 2006, no del texto oficial completo. Una obra real requiere la revisión de un ingeniero electricista colegiado.</div>`;
+}
+
+/* ---------- Ciclo de actualización ---------- */
+let tabActual = 'datos';
+try { tabActual = localStorage.getItem('cotiz-elec-tab') || 'datos'; } catch(e){}
+const r1 = v => Math.round(v*10)/10;
+function autoRecorridos(){
+  const lim = v => Math.max(1.5, Math.min(6, r1(v)));
+  if (S.auto){
+    S.mLuz = lim(1.3*Math.sqrt(S.area/Math.max(S.luz,1)));
+    S.mToma = lim(1.3*Math.sqrt(S.area/Math.max(S.tomas+S.tomasC,1)));
+    S.mHome = r1(0.6*Math.sqrt(S.area/Math.max(S.pisos,1)));
+  }
+  ['mLuz','mToma','mHome'].forEach(k => { const el = $('#f-'+k); if (!el) return;
+    if (S.auto) el.value = S[k];
+    el.disabled = S.auto; document.querySelectorAll('button[data-k="'+k+'"]').forEach(b => b.disabled = S.auto); });
+}
+function update(){
+  autoRecorridos();
+  const ci = $('#f-igv'); if (ci) ci.checked = S.igv;
+  if (!S.zonas[S.zona]) S.zona = 0;
+  S.pp = S.zonas[S.zona].p;
+  const zn = $('#z-nota'); if (zn) zn.textContent = 'Se cotiza con S/ '+S.pp+' por punto. Marca la zona de la obra; puedes cambiar los nombres y los precios.';
+  const c = compute();
+  $('#h-total').textContent = 'S/ ' + fmt(c.total);
+  $('#h-lbl').textContent = S.soloMO ? 'Total (solo mano de obra)' : 'Total cotización';
+  $('#h-meta').innerHTML = `${fmt(S.area)} m² · ${c.puntos} puntos<br>${fmt(c.demanda/1000,1)} kW · general ${c.sis.polos}×${c.gen} A`;
+  drawTablero(c); drawMetrado(c); drawCotiza(c); drawFormulas(c);
+  save();
+}
+function showTab(t){
+  if (!$('#t-'+t)) t = 'datos';
+  tabActual = t;
+  document.querySelectorAll('.tab[id^="t-"]').forEach(el => el.hidden = el.id !== 't-'+t);
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab===t));
+  $('#screen').scrollTop = 0;
+  try { localStorage.setItem('cotiz-elec-tab', t); } catch(e){}
+}
+const setNum = (inp, v) => {
+  const min = Number(inp.dataset.min); v = Number(inp.dataset.st)<1 ? r1(Number(v)) : Math.round(Number(v)); if (!isFinite(v)) v = min;
+  v = Math.max(min, Math.min(9999, v)); S[inp.dataset.k] = v; return v;
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tab) return showTab(b.dataset.tab);
+  if (b.dataset.step){ const inp = $('#f-'+b.dataset.k); inp.value = setNum(inp, Number(inp.value) + Number(b.dataset.step)*Number(inp.dataset.st)); return update(); }
+  if (b.dataset.sis){ S.sistema = b.dataset.sis; document.querySelectorAll('#seg-sis button').forEach(x => x.setAttribute('aria-pressed', x===b)); return update(); }
+  if (b.dataset.zstep){ const j = Number(b.dataset.zi), z = S.zonas[j]; z.p = Math.max(0, Math.min(999, z.p + Number(b.dataset.zstep))); $('#z-p-'+j).value = z.p; return update(); }
+  if (b.dataset.tipo){ S.soloMO = b.dataset.tipo==='mo'; return update(); }
+  if (b.id==='btn-pdf') return descargaPDF(false);
+  if (b.id==='btn-share') return descargaPDF(true);
+  if (b.id==='btn-guardar'){
+    const v = paraCliente(compute());
+    LISTA.unshift({nombre:(S.cliente || 'Sin nombre') + (S.piso ? ' - ' + S.piso : ''), fecha:new Date().toLocaleDateString('es-PE'), total:v.total, datos:JSON.parse(JSON.stringify(S))});
+    if (LISTA.length>60) LISTA.length = 60;
+    avisoArch = guarda('cotiz-lista', LISTA) ? 'Cotización guardada.' : 'No se pudo guardar: el almacenamiento está lleno o bloqueado.';
+    borrar = null; return drawArchivo();
+  }
+  if (b.id==='btn-nueva'){
+    ['luz','intS','conm','tomas','tomasC'].concat(Object.keys(ESP)).forEach(k => S[k] = 0);
+    S.cliente = ''; S.piso = 'Piso 1'; avisoArch = 'Cotización nueva. Se conservaron tus precios, zonas y alturas.';
+    drawDatos(); update(); drawArchivo(); return showTab('datos');
+  }
+  if (b.dataset.abrir){
+    const q = LISTA[Number(b.dataset.abrir)];
+    if (q){ S = Object.assign({}, DEF, JSON.parse(JSON.stringify(q.datos))); avisoArch = ''; borrar = null; drawDatos(); update(); drawArchivo(); showTab('cotiza'); }
+    return;
+  }
+  if (b.dataset.borrar){
+    const i = Number(b.dataset.borrar);
+    if (borrar===i){ LISTA.splice(i,1); guarda('cotiz-lista', LISTA); borrar = null; avisoArch = 'Cotización borrada.'; } else borrar = i;
+    return drawArchivo();
+  }
+  if (b.dataset.modo){ S.modo = b.dataset.modo; document.querySelectorAll('#seg-modo button').forEach(x => x.setAttribute('aria-pressed', x===b)); return update(); }
+  if (b.id==='btn-copy'){
+    const txt = textoCotizacion(compute()), out = $('#copy-out');
+    const fallback = () => { out.hidden = false; out.value = txt; out.focus(); out.select(); b.textContent = 'Selecciona el texto y cópialo'; };
+    try { navigator.clipboard.writeText(txt).then(() => { b.textContent = 'Copiado'; }, fallback); } catch(err){ fallback(); }
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.neg){ NEG[t.dataset.neg] = t.value; guarda('cotiz-negocio', NEG); return; }
+  if (t.dataset.text){ S[t.dataset.text] = t.value; return update(); }
+  if (t.dataset.zsel){ S.zona = Number(t.dataset.zsel); return update(); }
+  if (t.dataset.zn){ S.zonas[Number(t.dataset.zn)].n = t.value; return update(); }
+  if (t.dataset.zp){ const v = Math.round(Number(t.value)); if (t.value !== '' && isFinite(v)) S.zonas[Number(t.dataset.zp)].p = Math.max(0, Math.min(999, v)); return update(); }
+  if (t.dataset.chk){ S[t.dataset.chk] = t.checked; return update(); }
+  if (t.dataset.k && t.value !== ''){ setNum(t, t.value); update(); }
+});
+document.addEventListener('change', e => { const t = e.target; if (t.dataset.k && t.type==='number') t.value = setNum(t, t.value); });
+
+/* ---------- Archivo: cotizaciones guardadas y datos del negocio ---------- */
+let borrar = null, avisoArch = '';
+function drawArchivo(){
+  $('#t-archivo').innerHTML = `
+  <div><h2>Cotización actual</h2><div class="tab" style="gap:8px">
+    <button class="btn" type="button" id="btn-guardar">Guardar esta cotización</button>
+    <button class="btn btn2" type="button" id="btn-nueva">Empezar una cotización nueva</button>
+    <p class="note">${esc(avisoArch) || 'La cotización en curso se conserva sola. Guárdala para tenerla en la lista y volver a abrirla después.'}</p></div></div>
+  <div><h2>Cotizaciones guardadas</h2>${LISTA.length ? `<div class="group">${LISTA.map((q,i) => `<div class="row"><div class="lbl"><b>${esc(q.nombre)}</b><span class="hint">${esc(q.fecha)} · ${money(q.total)}</span></div>
+    <div class="step"><button type="button" class="mini" data-abrir="${i}">Abrir</button><button type="button" class="mini" data-borrar="${i}">${borrar===i ? '¿Seguro?' : 'Borrar'}</button></div></div>`).join('')}</div>` : '<p class="note">Todavía no hay cotizaciones guardadas.</p>'}</div>
+  <div><h2>Mi negocio (sale en el PDF)</h2><div class="tab" style="gap:8px">
+    <input class="text-in" id="n-nombre" data-neg="nombre" value="${esc(NEG.nombre)}" placeholder="Nombre o razón social" aria-label="Nombre o razón social">
+    <input class="text-in" id="n-tel" data-neg="tel" inputmode="tel" value="${esc(NEG.tel)}" placeholder="Teléfono" aria-label="Teléfono">
+    <input class="text-in" id="n-ruc" data-neg="ruc" inputmode="numeric" value="${esc(NEG.ruc)}" placeholder="RUC (opcional)" aria-label="RUC">
+  </div></div>
+  <p class="note">Todo se guarda solo en este celular. Si borras los datos del navegador o desinstalas la app, se pierde.</p>`;
+}
+
+drawDatos(); update(); drawArchivo(); showTab(tabActual);
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
