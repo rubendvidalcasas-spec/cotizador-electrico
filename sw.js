@@ -1,6 +1,6 @@
 // Guarda la app en el celular para que funcione sin internet.
 // Cambia el número de versión cada vez que modifiques index.html para forzar la actualización.
-const VERSION = 'cotizador-v9';
+const VERSION = 'cotizador-v10';
 const PROPIOS = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 const EXTERNOS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',

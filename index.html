@@ -135,7 +135,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <body>
 <div class="app">
   <header class="head gut">
-    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 9</span></div>
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 10</span></div>
     <div class="total-row">
       <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
       <div class="head-meta" id="h-meta"></div>
@@ -164,7 +164,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
-const APP_VERSION = 9;   // subir junto con VERSION en sw.js en cada publicación
+const APP_VERSION = 10;   // subir junto con VERSION en sw.js en cada publicación
 /* ---------- Estado (ejemplo cargado) ---------- */
 const DEF = {
   cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', difModo:'general', area:120, pisos:2, dist:15,
@@ -462,23 +462,7 @@ function dibujaEsquema(c){
   const tubo = (x,y,w) => `<rect x="${x}" y="${y}" width="${w}" height="14" rx="5" fill="#9AA3AD" stroke="#566170" stroke-width="1.1"/><rect x="${x+4}" y="${y+2.5}" width="${w-8}" height="4" rx="2" fill="#4B5563"/>`;
   const riel = (y,x1,x2) => `<rect x="${x1}" y="${y+30}" width="${x2-x1}" height="24" fill="#B4BDC9" stroke="#7C8794"/>`;
   const borne = (cx,cy) => `<rect x="${cx-9}" y="${cy-6.5}" width="18" height="13" rx="2" fill="#DDE2E8" stroke="#8A95A3" stroke-width=".8"/><circle cx="${cx}" cy="${cy}" r="4" fill="#A3ACB8" stroke="#566170" stroke-width=".8"/><path d="M${cx-2.5} ${cy}h5" stroke="#566170" stroke-width="1"/>`;
-  const aparato = (x,y,polos,tipo,cap,rot) => {
-    const w = polos*PW, mid = x+w/2;
-    let s = `<rect x="${x}" y="${y}" width="${w}" height="${DH}" rx="4" fill="#FBFBFC" stroke="#566170" stroke-width="1.2"/>`;
-    for (let k=0;k<polos;k++){ const cx = x+PW/2+k*PW; s += borne(cx,y+8.5) + borne(cx,y+DH-8.5);
-      if (k>0) s += `<path d="M${x+k*PW} ${y+17}v${DH-34}" stroke="#C3CCD7" stroke-width="1"/>`; }
-    s += `<text x="${mid}" y="${y+28}" font-size="11" font-weight="700" text-anchor="middle" fill="${ink}">${cap}</text>`;
-    if (tipo==='dif'){
-      s += `<text x="${mid}" y="${y+38}" font-size="7.5" text-anchor="middle" fill="${ink}">30 mA</text>
-        <rect x="${x+6}" y="${y+42}" width="16" height="12" rx="2" fill="#E8892B" stroke="#8A4E17" stroke-width=".8"/><text x="${x+14}" y="${y+51}" font-size="8" font-weight="700" text-anchor="middle" fill="#3B2408">T</text>
-        <rect x="${x+w-22}" y="${y+41}" width="15" height="14" rx="2" fill="#1E9E4A" stroke="#14532D" stroke-width=".8"/>`;
-    } else {
-      const col = tipo==='gen' ? '#12233F' : '#2F3B4D';
-      s += `<rect x="${x+7}" y="${y+37}" width="${w-14}" height="8" rx="2" fill="${col}"/><rect x="${mid-9}" y="${y+33}" width="18" height="18" rx="2.5" fill="${col}"/><rect x="${mid-6}" y="${y+36}" width="12" height="5" rx="1.5" fill="#9AA6B5"/>`;
-    }
-    s += `<rect x="${x+4}" y="${y+DH-30}" width="${w-8}" height="12" rx="2" fill="#FFF7C2" stroke="#B59B1A" stroke-width=".8"/><text x="${mid}" y="${y+DH-21}" font-size="8" font-weight="700" text-anchor="middle" fill="${ink}">${rot}</text>`;
-    return s;
-  };
+  const aparato = aparatoReal;
   const libre = (x,y) => `<rect x="${x+1.5}" y="${y}" width="${PW-3}" height="${DH}" rx="3" fill="none" stroke="#8A95A3" stroke-dasharray="4 3"/>`;
 
   // Alturas de cada fila: las ocupadas llevan canal de cables arriba y salida a tubos abajo
@@ -591,23 +575,7 @@ function kitEsquema(){
   const tubo = (x,y,w) => `<rect x="${x}" y="${y}" width="${w}" height="14" rx="5" fill="#9AA3AD" stroke="#566170" stroke-width="1.1"/><rect x="${x+4}" y="${y+2.5}" width="${w-8}" height="4" rx="2" fill="#4B5563"/>`;
   const riel = y => `<rect x="${X0-6}" y="${y+30}" width="${ROW_W+12}" height="24" fill="#B4BDC9" stroke="#7C8794"/>`;
   const borne = (cx,cy) => `<rect x="${cx-9}" y="${cy-6.5}" width="18" height="13" rx="2" fill="#DDE2E8" stroke="#8A95A3" stroke-width=".8"/><circle cx="${cx}" cy="${cy}" r="4" fill="#A3ACB8" stroke="#566170" stroke-width=".8"/><path d="M${cx-2.5} ${cy}h5" stroke="#566170" stroke-width="1"/>`;
-  const aparato = (x,y,polos,tipo,cap,rot) => {
-    const w = polos*PW, mid = x+w/2;
-    let s = `<rect x="${x}" y="${y}" width="${w}" height="${DH}" rx="4" fill="#FBFBFC" stroke="#566170" stroke-width="1.2"/>`;
-    for (let k=0;k<polos;k++){ const cx = x+PW/2+k*PW; s += borne(cx,y+8.5) + borne(cx,y+DH-8.5);
-      if (k>0) s += `<path d="M${x+k*PW} ${y+17}v${DH-34}" stroke="#C3CCD7" stroke-width="1"/>`; }
-    s += `<text x="${mid}" y="${y+28}" font-size="11" font-weight="700" text-anchor="middle" fill="${ink}">${cap}</text>`;
-    if (tipo==='dif'){
-      s += `<text x="${mid}" y="${y+38}" font-size="7.5" text-anchor="middle" fill="${ink}">30 mA</text>
-        <rect x="${x+6}" y="${y+42}" width="16" height="12" rx="2" fill="#E8892B" stroke="#8A4E17" stroke-width=".8"/><text x="${x+14}" y="${y+51}" font-size="8" font-weight="700" text-anchor="middle" fill="#3B2408">T</text>
-        <rect x="${x+w-22}" y="${y+41}" width="15" height="14" rx="2" fill="#1E9E4A" stroke="#14532D" stroke-width=".8"/>`;
-    } else {
-      const col = tipo==='gen' ? '#12233F' : '#2F3B4D';
-      s += `<rect x="${x+7}" y="${y+37}" width="${w-14}" height="8" rx="2" fill="${col}"/><rect x="${mid-9}" y="${y+33}" width="18" height="18" rx="2.5" fill="${col}"/><rect x="${mid-6}" y="${y+36}" width="12" height="5" rx="1.5" fill="#9AA6B5"/>`;
-    }
-    s += `<rect x="${x+4}" y="${y+DH-30}" width="${w-8}" height="12" rx="2" fill="#FFF7C2" stroke="#B59B1A" stroke-width=".8"/><text x="${mid}" y="${y+DH-21}" font-size="8" font-weight="700" text-anchor="middle" fill="${ink}">${rot}</text>`;
-    return s;
-  };
+  const aparato = aparatoReal;
   const libre = (x,y) => `<rect x="${x+1.5}" y="${y}" width="${PW-3}" height="${DH}" rx="3" fill="none" stroke="#8A95A3" stroke-dasharray="4 3"/>`;
   return {HEX, ink, BG, DH, corto, seg, salto, dot, tubo, riel, aparato, libre};
 }
@@ -773,6 +741,36 @@ function dibujaGeneral(c){
     ${tubo(215,yCaja-7,42)}
     <path d="M224 ${yCaja+15}h24M228 ${yCaja+20}h16M232 ${yCaja+25}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
     <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text></svg>`;
+}
+
+/* ---------- Aparatos del tablero dibujados como los reales ---------- */
+// Termomagnético: "C" + amperios, símbolo térmico-magnético y palanca negra. Diferencial: botón T, "A 30mA", símbolo y palanca verde.
+function aparatoReal(x,y,polos,tipo,cap,rot){
+  const DH = 84, w = polos*PW, ink = '#1B2430', cx = k => x+PW/2+k*PW;
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${DH}" rx="3" fill="#F4F5F7" stroke="#6B7684" stroke-width="1.1"/>
+    <rect x="${x+1.5}" y="${y+18}" width="${w-3}" height="${DH-36}" fill="#FFFFFF" stroke="#C3CCD7" stroke-width=".8"/>`;
+  for (let k=1;k<polos;k++) s += `<path d="M${x+k*PW} ${y+2}v${DH-4}" stroke="#D3DAE2" stroke-width="1"/>`;
+  for (let k=0;k<polos;k++) s += `<circle cx="${cx(k)}" cy="${y+9.5}" r="5.2" fill="#55606C" stroke="#2F3B4D" stroke-width=".8"/>
+    <circle cx="${cx(k)}" cy="${y+DH-9.5}" r="5.2" fill="#55606C" stroke="#2F3B4D" stroke-width=".8"/>`;
+  if (tipo==='dif'){
+    const amp = String(cap).replace(/\s/g,'');
+    s += `<rect x="${x+5}" y="${y+21}" width="15" height="11" rx="1.5" fill="#1E9E4A" stroke="#14532D" stroke-width=".8"/>
+      <text x="${x+12.5}" y="${y+29.5}" font-size="8.5" font-weight="700" text-anchor="middle" fill="#0B2414">T</text>
+      <text x="${x+3.5}" y="${y+42}" font-size="6.6" font-weight="700" fill="${ink}">${amp} 30mA</text>
+      <ellipse cx="${x+13}" cy="${y+49}" rx="7" ry="3" fill="none" stroke="${ink}" stroke-width=".9"/>
+      <path d="M${x+10} ${y+44}v10M${x+16} ${y+44}v10" stroke="${ink}" stroke-width=".9"/>
+      <rect x="${x+w-12}" y="${y+22}" width="9" height="26" rx="2" fill="#1E9E4A" stroke="#14532D" stroke-width=".8"/>
+      <rect x="${x+w-12}" y="${y+40}" width="9" height="8" rx="2" fill="#15803D"/>`;
+  } else {
+    s += `<text x="${cx(0)}" y="${y+31}" font-size="${String(cap).length>3 ? 8.5 : 10}" font-weight="700" text-anchor="middle" fill="${ink}">${cap}</text>`;
+    if (polos>1){ const k = cx(1);
+      s += `<path d="M${k-4} ${y+21}v3l2.5 1.6-2.5 1.6v4M${k+2} ${y+21}v3.5q3.5 1.4 0 2.8v3.4" fill="none" stroke="${ink}" stroke-width=".9"/>`; }
+    s += `<rect x="${x+3}" y="${y+37}" width="${w-6}" height="15" rx="2" fill="#1F1F1F"/>`;
+    for (let k=0;k<polos;k++) s += `<rect x="${cx(k)-6}" y="${y+40}" width="12" height="6" rx="1" fill="#1E9E4A"/><text x="${cx(k)}" y="${y+45}" font-size="4.6" font-weight="700" text-anchor="middle" fill="#FFFFFF">ON</text>`;
+  }
+  s += `<rect x="${x+3}" y="${y+55}" width="${w-6}" height="11" rx="2" fill="#FFF7C2" stroke="#B59B1A" stroke-width=".8"/>
+    <text x="${x+w/2}" y="${y+63.3}" font-size="7.8" font-weight="700" text-anchor="middle" fill="${ink}">${rot}</text>`;
+  return s;
 }
 
 /* ---------- Pestañas de resultados ---------- */
