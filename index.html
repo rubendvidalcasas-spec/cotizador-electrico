@@ -127,6 +127,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 
 .tabs{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
 .tabs button{flex:1;min-height:54px;border:0;background:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);border-top:3px solid transparent;padding:4px 1px}
+.sec-uso{padding:6px 10px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
 .pasos{margin:10px 0 6px;padding-left:22px;font-size:13.5px;display:flex;flex-direction:column;gap:5px}
 .step button.mini{width:auto;padding:0 10px;font-size:13px}
 .tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent)}
@@ -135,7 +136,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <body>
 <div class="app">
   <header class="head gut">
-    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 12</span></div>
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 13</span></div>
     <div class="total-row">
       <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
       <div class="head-meta" id="h-meta"></div>
@@ -164,13 +165,13 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
-const APP_VERSION = 12;   // subir junto con VERSION en sw.js en cada publicación
+const APP_VERSION = 13;   // subir junto con VERSION en sw.js en cada publicación
 /* ---------- Estado (ejemplo cargado) ---------- */
 const DEF = {
   cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', difModo:'general', area:120, pisos:2, dist:15,
   luz:18, intS:10, conm:2, tomas:22, tomasC:6,
   ducha:1, therma:0, cocina:0, aire:0, bomba:1, lavadora:0,
-  util:0, igv:false, pozo:true, soloMO:false, modo:'cableado', tabExiste:false,
+  util:0, igv:false, pozo:true, pPozo:350, soloMO:false, modo:'cableado', tabExiste:false,
   zona:1, zonas:[{n:'Económica: Carabayllo, Comas, SJL',p:25},{n:'Media: Los Olivos, SMP, Cercado',p:30},{n:'Media alta: Surco, Jesús María, Pueblo Libre',p:38},{n:'Exclusiva: Miraflores, San Isidro, La Molina',p:45}],
   piso:'Piso 1', pp:30, pEsp:90, pAlim:160, pDisp:25, pTubo:50, pLum:0,
   H:2.5, hInt:1.3, hToma:0.4, hCoc:1.1, hTab:1.7, punta:0.2,
@@ -222,7 +223,7 @@ function compute(){
     const n = Math.max(Math.ceil(total/maxPor), Math.min(minCirc, total));
     for (let i=0;i<n;i++){
       const pts = Math.floor(total/n) + (i < total%n ? 1 : 0), w = pts*wPunto;
-      circ.push({k, nombre: nombre+(n>1?' '+(i+1):''), det: pts+' puntos', w, i:w/V, itm, sec:secFor(itm), tierra:tierraFor(itm)});
+      circ.push({k, nombre: nombre+(n>1?' '+(i+1):''), det: pts+' puntos', pts, w, i:w/V, itm, sec:secFor(itm), tierra:tierraFor(itm)});
     }
   };
   reparte(s.luz, 'Iluminación', 100, 16, s.maxC, s.pisos, 'L');
@@ -260,9 +261,9 @@ function compute(){
   const tamG = reparteGrupos(circ.length, nID);
   const tablero = Math.max(next(TAB, Math.max(12, Math.ceil(usados*1.2))), 12*(porCirc ? acomodaCirc(sis.polos, circ.length) : difGen ? acomodaGen(sis.polos, circ.length) : acomoda(sis.polos, tamG)).rows); // mínimo 4 bipolares + 2 de reserva, regla 050-108
 
-  // Metrado de cables por geometría: clave "sección|color"
-  const f = 1 + s.desp/100, cab = {}, p = s.punta;
-  const add = (sec,col,m) => { if (m>0){ const key = sec+'|'+col; cab[key] = (cab[key]||0) + m*f; } };
+  // Metrado de cables por circuito: clave "sección|color|rol", con el uso de cada tramo
+  const f = 1 + s.desp/100, cab = {}, usoK = {}, p = s.punta;
+  const add = (sec,col,m,rol,uso) => { if (m>0){ const key = sec+'|'+col+'|'+rol; cab[key] = (cab[key]||0) + m*f; (usoK[key] = usoK[key] || new Set()).add(uso); } };
   const B = s.sistema==='tri380' ? 'blanco' : 'negro';
   const nTomas = s.tomas + s.tomasC, cajasInt = s.intS + 2*s.conm;
   const nC = k => circ.filter(c => c.k===k).length;
@@ -272,18 +273,31 @@ function compute(){
   const troncalT = nC('T')*(s.mHome + s.hTab + p) + s.tomas*(s.mToma + 2*s.hToma + 2*p)
                  + nC('C')*(s.mHome + s.hTab + p) + s.tomasC*(s.mToma + 2*s.hCoc + 2*p);
   const lEsp = s.mEsp + 2*p;
-  add(2.5,'rojo', troncalL + (s.intS + s.conm)*baja);
-  add(2.5,B, troncalL);
-  add(2.5,'naranja', s.intS*baja + s.conm*(baja + 2*(2*baja + s.mLuz)));
-  add(2.5,'verde', troncalL + troncalT);
-  add(4,'rojo', troncalT); add(4,B, troncalT);
-  espCirc.forEach(c => { add(c.sec,'rojo',lEsp); add(c.sec,B,lEsp); add(c.tierra,'verde',lEsp); });
-  add(fs,'rojo',s.dist);
-  if (tri){ add(fs,'negro',s.dist); add(fs,'azul',s.dist); if (s.sistema==='tri380') add(fs,'blanco',s.dist); }
-  else add(fs,B,s.dist);
-  add(tGen,'verde',s.dist);
-  const cables = {};
-  Object.keys(cab).forEach(key => { const [sec,col] = key.split('|'); (cables[sec] = cables[sec]||[]).push({col, m:Math.ceil(cab[key])}); });
+  // Colores por circuito según la regla 030-036 del CNE, iguales a los del dibujo del tablero
+  const condC = sis.polos===2 ? ['rojo',B] : sis.polos===3 ? ['rojo','negro','azul'] : ['rojo','negro','azul','blanco'];
+  const parG = g => sis.polos===2 ? [0,1] : sis.polos===3 ? [[0,1],[1,2],[0,2]][g%3] : [g%3,3];
+  const grupoDe = i => { let a = 0; for (let g=0; g<tamG.length; g++){ a += tamG[g]; if (i < a) return g; } return 0; };
+  const colsDe = i => (porCirc || difGen ? parFases(sis.polos, i) : parG(grupoDe(i))).map(j => condC[j]);
+  const totL = circ.filter(x => x.k==='L').reduce((t,x) => t+x.pts, 0) || 1;
+  circ.forEach((x,i) => {
+    const [a,b] = colsDe(i), u = 'C'+(i+1)+' '+x.nombre.replace(/ \d+$/,'');
+    if (x.k==='L'){
+      const sh = x.pts/totL, tr = (s.mHome + subeTab + p) + x.pts*(s.mLuz + 2*p);
+      add(x.sec,a, tr + sh*(s.intS + s.conm)*baja,'fase',u); add(x.sec,b,tr,'fase',u);
+      add(x.sec,a, sh*(s.intS*baja + s.conm*(baja + 2*(2*baja + s.mLuz))),'ret',u);
+      if (s.pozo) add(x.tierra,'verde',tr,'tierra',u);
+    } else if (x.k==='T' || x.k==='C'){
+      const tr = (s.mHome + s.hTab + p) + x.pts*(s.mToma + 2*(x.k==='T' ? s.hToma : s.hCoc) + 2*p);
+      add(x.sec,a,tr,'fase',u); add(x.sec,b,tr,'fase',u); if (s.pozo) add(x.tierra,'verde',tr,'tierra',u);
+    } else {
+      add(x.sec,a,lEsp,'fase',u); add(x.sec,b,lEsp,'fase',u); if (s.pozo) add(x.tierra,'verde',lEsp,'tierra',u);
+    }
+  });
+  condC.forEach(col => add(fs,col,s.dist,'fase','Alimentador medidor → tablero'));
+  if (s.pozo) add(tGen,'verde',s.dist,'tierra','Barra de tierra → pozo a tierra');
+  const cables = {}, ordenC = {rojo:0, negro:1, azul:2, blanco:3, verde:5}, peso = x => ordenC[x.col] + (x.rol==='ret' ? .5 : 0);
+  Object.keys(cab).forEach(key => { const [sec,col,rol] = key.split('|'); (cables[sec] = cables[sec]||[]).push({col, rol, m:Math.ceil(cab[key]), uso:[...usoK[key]]}); });
+  Object.values(cables).forEach(l => l.sort((x,y) => peso(x)-peso(y)));
 
   const mTubo = troncalL + s.intS*baja + s.conm*(3*baja + s.mLuz) + troncalT + nEsp*lEsp;
   const tubos = Math.ceil(mTubo/3), tubosAlim = Math.ceil(s.dist/3), dAlim = fs<=10 ? 25 : 35;
@@ -313,7 +327,7 @@ function compute(){
   mat.push({g:'Conexión y consumibles', d:'Cinta vulcanizante (zonas húmedas y alimentador)', u:'rollo', q:1, pu:P.vulc});
   mat.push({g:'Conexión y consumibles', d:'Conectores de empalme para cajas de luz', u:'und', q:s.luz*3, pu:P.empalme});
   mat.push({g:'Conexión y consumibles', d:'Terminales tipo pin para bornes del tablero', u:'und', q:circ.length*3 + nID*4, pu:P.pin});
-  mat.push({g:'Conexión y consumibles', d:'Terminales de compresión para alimentador y tierra', u:'und', q:sis.polos+2, pu:P.ojo});
+  mat.push({g:'Conexión y consumibles', d:'Terminales de compresión para alimentador y tierra', u:'und', q:sis.polos+(s.pozo?2:0), pu:P.ojo});
   mat.push({g:'Conexión y consumibles', d:'Peine de conexión para tablero', u:'und', q:Math.ceil(usados/12), pu:P.peine});
   mat.push({g:'Conexión y consumibles', d:'Lubricante para pasar cable', u:'und', q:Math.ceil(mCable/400), pu:P.lubricante});
   mat.push({g:'Conexión y consumibles', d:'Cintillos de amarre, bolsa de 100', u:'und', q:1, pu:P.cintillos});
@@ -343,7 +357,7 @@ function compute(){
     {d:'Alimentador para carga especial'+en, s:'Cableado y conexionado directo del tablero: '+espNombres, q:nEsp, pu:s.pEsp},
     {d:'Instalación de luminarias'+en, s:'Montaje y conexión de cada luminaria', q:s.pLum>0 ? s.luz : 0, pu:s.pLum},
     {d:'Entubado y colocación de cajas', s:'Por punto, solo en instalación completa', q:completo ? puntos + nEsp : 0, pu:s.pTubo},
-    {d:'Construcción de pozo a tierra', s:'Excavación, varilla, tratamiento y conexión', q:s.pozo?1:0, pu:P.mo.pozo}
+    {d:'Construcción de pozo a tierra', s:'Excavación, varilla, tratamiento y conexión', q:s.pozo?1:0, pu:s.pPozo}
   ].filter(x => x.q>0);
   mo.forEach((x,i) => x.c = (i+1) + '.');
   const totMO = mo.reduce((t,x)=>t+x.q*x.pu,0);
@@ -352,7 +366,7 @@ function compute(){
 
   return {circ, basica, dCoc, dAgua, dAC, dOtras, demanda, I, gen, fs, caida, tGen, nID, idA, porCirc, difGen, idDe, usados, tablero, sis, tri,
     cables, B, mTubo, mCable, baja, completo, tubos, tubosAlim, dAlim, rect, cajasInt, nTomas, nEsp, matList, matBase, totMat, mo, totMO,
-    directo, utilidad, sub, igv, total, puntos, disp};
+    directo, utilidad, sub, igv, total, puntos, disp, conTierra:!!s.pozo};
 }
 
 /* ---------- Utilidades de pantalla ---------- */
@@ -399,11 +413,13 @@ function drawDatos(){
       <button type="button" data-zstep="5" data-zi="${j}" aria-label="Subir precio">+</button></div></div>`).join('')}</div>
     <p class="note" id="z-nota"></p></div>` : '') + `<div><h2>${g[0]}</h2><div class="group">${g[1].map(fila).join('')}</div></div>`).join('')}
   <div><h2>Condiciones de la cotización</h2><div class="group">
-    ${fila(F('util','Utilidad y gastos generales','','%',1,0))}
-    <div class="row"><label class="lbl" for="f-pozo"><b>Incluir pozo a tierra</b><span class="hint">Obligatorio si la vivienda no tiene uno</span></label><input class="chk" type="checkbox" id="f-pozo" data-chk="pozo" ${S.pozo?'checked':''}></div>
     <div class="row"><label class="lbl" for="f-igv"><b>Agregar IGV 18 %</b></label><input class="chk" type="checkbox" id="f-igv" data-chk="igv" ${S.igv?'checked':''}></div>
     <div class="row"><label class="lbl" for="f-tabExiste"><b>La caja del tablero ya está empotrada</b><span class="hint">Solo se ponen los interruptores</span></label><input class="chk" type="checkbox" id="f-tabExiste" data-chk="tabExiste" ${S.tabExiste?'checked':''}></div>
   </div></div>
+  <div><h2>Puesta a tierra</h2><div class="group">
+    <div class="row"><label class="lbl" for="f-pozo"><b>Incluir sistema de puesta a tierra</b><span class="hint">Pozo a tierra, barra de tierra y cable de tierra en cada circuito</span></label><input class="chk" type="checkbox" id="f-pozo" data-chk="pozo" ${S.pozo?'checked':''}></div>
+    ${fila(F('pPozo','Mano de obra del pozo a tierra','Excavación, varilla, tratamiento y conexión','S/',10,0))}
+  </div><p class="warn" id="tierra-aviso" hidden>Sin puesta a tierra se quitan el pozo y todos los cables de tierra. El CNE exige puesta a tierra en viviendas (Sección 060, resistencia máxima 25 Ω) y tomacorrientes con línea de tierra. Úsalo solo si la vivienda ya tiene el sistema instalado y en buen estado.</p></div>
   <div><h2>Alturas de montaje</h2><div class="group">${ALTURAS.map(fila).join('')}</div></div>
   <div><h2>Recorridos del cable</h2><div class="group">
     <div class="row"><label class="lbl" for="f-auto"><b>Estimar según el área y la cantidad de puntos</b><span class="hint">Desactívalo para escribir tus propias medidas</span></label><input class="chk" type="checkbox" id="f-auto" data-chk="auto" ${S.auto?'checked':''}></div>
@@ -534,17 +550,18 @@ function dibujaEsquema(c){
   // Barra de tierra y pozo
   const yBar = yFin + 2, yCaja = yBar + 30;
   V.push(seg([[366, (yTs[0]+DH+22)],[366,yBar+6],[352,yBar+6]],'verde'), seg([[236,yBar+13],[236,yCaja+14]],'verde'));
+  if (!c.conTierra){ V.length = 0; for (let i=D.length-1;i>=0;i--) if (D[i].includes('fill="#1E9E4A"')) D.splice(i,1); }
   return `<svg viewBox="0 0 ${VW} ${yCaja+34}" width="100%" role="img" aria-label="Tablero y esquema de conexión" font-family="inherit">
     <rect x="1" y="9" width="${VW-2}" height="${yCaja-9}" rx="10" fill="${BG}" stroke="#8C8572" stroke-width="2"/>
     ${R.join('')}${L.join('')}${V.join('')}${W.join('')}${A.join('')}${D.join('')}${U.join('')}${T.join('')}
-    <rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
+    ${c.conTierra ? `<rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
     ${[0,1,2,3,4,5,6,7,8].map(k => `<circle cx="${212+k*16.5}" cy="${yBar+6.5}" r="2.6" fill="#F3E3A1" stroke="#8C7420" stroke-width=".7"/>`).join('')}
-    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>
+    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>` : ''}
     <text x="12" y="${yBar+8}" font-size="8.6" font-weight="700" fill="${ink}">Tablero de ${c.tablero} polos</text>
     <text x="12" y="${yBar+19}" font-size="8" fill="#4B5563">${c.usados} usados, ${c.tablero-c.usados} libres</text>
-    ${tubo(215,yCaja-7,42)}
+    ${c.conTierra ? `${tubo(215,yCaja-7,42)}
     <path d="M224 ${yCaja+15}h24M228 ${yCaja+20}h16M232 ${yCaja+25}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
-    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text></svg>`;
+    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text>` : ''}</svg>`;
 }
 
 /* ---------- Tablero con un diferencial por circuito (regla 040-216, inciso 4) ---------- */
@@ -643,17 +660,18 @@ function dibujaPorCircuito(c){
     if (enBloque0.has(i)) D.push(dot(gt(i),prof(i),col)); });
   const yBar = yFin + 2, yCaja = yBar + 30;
   V.push(seg([[366, blk[0].yD+DH+22],[366,yBar+6],[352,yBar+6]],'verde'), seg([[236,yBar+13],[236,yCaja+14]],'verde'));
+  if (!c.conTierra){ V.length = 0; for (let i=D.length-1;i>=0;i--) if (D[i].includes('fill="#1E9E4A"')) D.splice(i,1); }
   return `<svg viewBox="0 0 ${VW} ${yCaja+34}" width="100%" role="img" aria-label="Tablero con un diferencial por circuito" font-family="inherit">
     <rect x="1" y="9" width="${VW-2}" height="${yCaja-9}" rx="10" fill="${BG}" stroke="#8C8572" stroke-width="2"/>
     ${R.join('')}${L.join('')}${V.join('')}${W.join('')}${A.join('')}${D.join('')}${U.join('')}${T.join('')}
-    <rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
+    ${c.conTierra ? `<rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
     ${[0,1,2,3,4,5,6,7,8].map(k => `<circle cx="${212+k*16.5}" cy="${yBar+6.5}" r="2.6" fill="#F3E3A1" stroke="#8C7420" stroke-width=".7"/>`).join('')}
-    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>
+    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>` : ''}
     <text x="12" y="${yBar+8}" font-size="8.6" font-weight="700" fill="${ink}">Tablero de ${c.tablero} polos</text>
     <text x="12" y="${yBar+19}" font-size="8" fill="#4B5563">${c.usados} usados, ${c.tablero-c.usados} libres</text>
-    ${tubo(215,yCaja-7,42)}
+    ${c.conTierra ? `${tubo(215,yCaja-7,42)}
     <path d="M224 ${yCaja+15}h24M228 ${yCaja+20}h16M232 ${yCaja+25}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
-    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text></svg>`;
+    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text>` : ''}</svg>`;
 }
 
 /* ---------- Tablero con un solo diferencial general (regla 040-216, incisos 1 y 2) ---------- */
@@ -730,17 +748,18 @@ function dibujaGeneral(c){
     if (u0[k].length) D.push(dot(dt(k),prof(k),col)); });
   const yBar = yFin + 2, yCaja = yBar + 30;
   V.push(seg([[366, gB+22],[366,yBar+6],[352,yBar+6]],'verde'), seg([[236,yBar+13],[236,yCaja+14]],'verde'));
+  if (!c.conTierra){ V.length = 0; for (let i=D.length-1;i>=0;i--) if (D[i].includes('fill="#1E9E4A"')) D.splice(i,1); }
   return `<svg viewBox="0 0 ${VW} ${yCaja+34}" width="100%" role="img" aria-label="Tablero con diferencial general" font-family="inherit">
     <rect x="1" y="9" width="${VW-2}" height="${yCaja-9}" rx="10" fill="${BG}" stroke="#8C8572" stroke-width="2"/>
     ${R.join('')}${L.join('')}${V.join('')}${W.join('')}${A.join('')}${D.join('')}${U.join('')}${T.join('')}
-    <rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
+    ${c.conTierra ? `<rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
     ${[0,1,2,3,4,5,6,7,8].map(k => `<circle cx="${212+k*16.5}" cy="${yBar+6.5}" r="2.6" fill="#F3E3A1" stroke="#8C7420" stroke-width=".7"/>`).join('')}
-    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>
+    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>` : ''}
     <text x="12" y="${yBar+8}" font-size="8.6" font-weight="700" fill="${ink}">Tablero de ${c.tablero} polos</text>
     <text x="12" y="${yBar+19}" font-size="8" fill="#4B5563">${c.usados} usados, ${c.tablero-c.usados} libres</text>
-    ${tubo(215,yCaja-7,42)}
+    ${c.conTierra ? `${tubo(215,yCaja-7,42)}
     <path d="M224 ${yCaja+15}h24M228 ${yCaja+20}h16M232 ${yCaja+25}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
-    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text></svg>`;
+    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text>` : ''}</svg>`;
 }
 
 /* ---------- Aparatos del tablero dibujados como los reales ---------- */
@@ -776,6 +795,7 @@ function aparatoReal(x,y,polos,tipo,cap,rot){
 /* ---------- Pestañas de resultados ---------- */
 function drawTablero(c){
   const avisos = [];
+  if (!c.conTierra) avisos.push('Cotización sin sistema de puesta a tierra. El CNE lo exige en viviendas; confirma que la vivienda ya lo tiene.');
   if (S.sistema==='mono' && c.demanda>10000) avisos.push('La demanda supera 10 kW. Consulta con la concesionaria un suministro trifásico.');
   if (c.caida>2.5) avisos.push('La caída de tensión del alimentador supera 2.5 % incluso con el cable más grueso de la tabla. Revisa la distancia.');
   if (c.tri) avisos.push('En tablero trifásico, reparte los circuitos entre las fases para equilibrar la carga.');
@@ -785,12 +805,12 @@ function drawTablero(c){
     <div><span>Demanda máxima</span><b>${fmt(c.demanda/1000,2)} kW</b><small>${c.sis.n}</small></div>
     <div><span>Corriente de diseño</span><b>${fmt(c.I,1)} A</b><small>por fase</small></div>
     <div><span>Interruptor general</span><b>${c.sis.polos}×${c.gen} A</b><small>termomagnético</small></div>
-    <div><span>Alimentador</span><b>${c.sis.polos}×${c.fs} mm²</b><small>+ tierra ${c.tGen} mm² · caída ${fmt(c.caida,2)} %</small></div>
+    <div><span>Alimentador</span><b>${c.sis.polos}×${c.fs} mm²</b><small>${c.conTierra ? '+ tierra '+c.tGen+' mm² · ' : ''}caída ${fmt(c.caida,2)} %</small></div>
     <div><span>Tablero</span><b>${c.tablero} polos</b><small>${c.usados} usados, ${c.tablero-c.usados} de reserva</small></div>
     <div><span>Diferenciales 30 mA</span><b>${c.difGen ? c.sis.polos+"×"+c.idA+" A" : c.porCirc ? c.nID+" unidades" : c.nID+" × 2×"+c.idA+" A"}</b><small>${c.difGen ? "uno general para toda la vivienda" : c.porCirc ? "uno por cada circuito" : "uno por cada 3 circuitos"}</small></div>
   </div></div>
   <div><h2>Tablero y esquema de conexión</h2><div class="panel-fig">${dibujaEsquema(c)}</div>
-    <div class="legend">${gruposDif(c).cond.map(k => `<span><span class="dot c-${k}"></span>${({rojo:'L1 rojo',negro:'L2 negro',azul:'L3 azul',blanco:'Neutro blanco'})[k]}</span>`).join('')}<span><span class="dot c-verde"></span>Tierra</span><span>Punto = empalme</span><span>Punteado = espacio libre</span></div>
+    <div class="legend">${gruposDif(c).cond.map(k => `<span><span class="dot c-${k}"></span>${({rojo:'L1 rojo',negro:'L2 negro',azul:'L3 azul',blanco:'Neutro blanco'})[k]}</span>`).join('')}${c.conTierra ? '<span><span class="dot c-verde"></span>Tierra</span>' : ''}<span>Punto = empalme</span><span>Punteado = espacio libre</span></div>
     <ol class="pasos">
       <li>Corta la energía en el medidor y comprueba con el probador que no hay tensión.</li>
       <li>El alimentador entra por arriba del interruptor general.</li>
@@ -798,14 +818,14 @@ function drawTablero(c){
       <li>${c.difGen ? "De la salida del diferencial general sale un peine a la entrada de todos los termomagnéticos (regla 040-216, incisos 1 y 2)." : c.porCirc ? "Cada circuito lleva su propio diferencial, justo debajo de su termomagnético: sale del termomagnético y entra al diferencial (regla 040-216, inciso 4)." : "Cada diferencial va a la cabeza de su grupo de hasta 3 circuitos y alimenta solo a esos termomagnéticos (regla 040-216)."}</li>
       <li>El diferencial protege a las personas contra descargas por fuga a tierra. El termomagnético protege los cables contra sobrecarga y cortocircuito. Se necesitan los dos.</li>
       <li>${c.porCirc ? "De cada diferencial salen los dos cables de su circuito, con los colores del esquema." : "De cada termomagnético salen los dos cables de su circuito, con los colores del esquema."}</li>
-      <li>La tierra no pasa por ningún interruptor: va de la barra de tierra a cada circuito y al pozo.</li>
+      ${c.conTierra ? '<li>La tierra no pasa por ningún interruptor: va de la barra de tierra a cada circuito y al pozo.</li>' : ''}
       ${c.tri && (c.porCirc || c.difGen) ? "<li>Cada circuito toma un par de fases distinto, indicado por el color de sus cables. Así la carga queda repartida.</li>" : ""}
       ${c.tri && !c.porCirc && !c.difGen ? `<li>${gruposDif(c).grupos.map((gr,g) => 'Dif. '+(g+1)+' usa '+gr.par.map(i => ({rojo:'R rojo',negro:'S negro',azul:'T azul',blanco:'neutro blanco'})[gruposDif(c).cond[i]]).join(' y ')).join('. ')}. Así la carga queda repartida entre las fases.</li>` : ''}
     </ol>
     <p class="note">El gabinete se dibuja por filas de 12 polos. El rótulo amarillo es la etiqueta de cada aparato. En cada tubo entran los tres cables del circuito: los dos de fuerza y el de tierra. En el gabinete real, los cables de las filas de arriba bajan por detrás del riel hasta sus tubos.</p></div>
   <div><h2>Cuadro de circuitos</h2><div class="tw"><table>
     <tr><th>Circuito</th><th class="n">Carga</th><th class="n">ITM</th><th class="n">Cable</th></tr>
-    ${c.circ.map((x,i) => `<tr><td>C${i+1} · ${x.nombre}<span class="sub">${x.det} · ${fmt(x.i,1)} A</span></td><td class="n">${fmt(x.w)} W</td><td class="n">2×${x.itm} A</td><td class="n">${x.sec} mm²<span class="sub">T ${x.tierra}</span></td></tr>`).join('')}
+    ${c.circ.map((x,i) => `<tr><td>C${i+1} · ${x.nombre}<span class="sub">${x.det} · ${fmt(x.i,1)} A</span></td><td class="n">${fmt(x.w)} W</td><td class="n">2×${x.itm} A</td><td class="n">${x.sec} mm²${c.conTierra ? '<span class="sub">T '+x.tierra+'</span>' : ''}</td></tr>`).join('')}
   </table></div></div>
   <div><h2>Cómo sale la demanda</h2><div class="tot">
     <div><span>Carga básica por área (${fmt(S.area)} m²)</span><span>${fmt(c.basica)} W</span></div>
@@ -818,7 +838,8 @@ function drawTablero(c){
 }
 
 function drawMetrado(c){
-  const fn = {rojo:'Fase L1 · rojo', negro:'Fase L2 · negro', azul:'Fase L3 · azul', blanco:'Neutro · blanco', verde:'Tierra · verde/amarillo', naranja:'Retorno de interruptor · naranja'};
+  const nomF = {rojo:'Fase L1 · rojo', negro: c.sis.polos===2 ? 'Fase L2 · negro' : 'Fase L2 · negro', azul:'Fase L3 · azul', blanco:'Neutro · blanco'};
+  const fn = x => x.rol==='tierra' ? 'Tierra · verde o verde/amarillo' : x.rol==='ret' ? 'Retorno de interruptor · '+x.col : nomF[x.col];
   const secs = Object.keys(c.cables).map(Number).sort((a,b)=>a-b);
   const grupos = ['Conexión y consumibles','Aparatos','Tablero','Tubería y cajas','Puesta a tierra'];
   $('#t-metrado').innerHTML = `
@@ -826,8 +847,9 @@ function drawMetrado(c){
     ${secs.map(sec => { const tot = c.cables[sec].reduce((t,x)=>t+x.m,0);
       const awg = {2.5:' (14 AWG)',4:' (12 AWG)',6:' (10 AWG)',10:' (8 AWG)',16:' (6 AWG)'}[sec] || '';
       return `<div class="sec-head"><span>Cable ${sec} mm²${awg}</span><span>${fmt(tot)} m · ${sec<=6 ? Math.ceil(tot/100)+' rollo(s) de 100 m' : 'por metro'}</span></div>
-      <table>${c.cables[sec].map(x => `<tr><td><span class="dot c-${x.col}"></span>${fn[x.col]}</td><td class="n">${fmt(x.m)} m</td></tr>`).join('')}</table>`; }).join('')}
-  </div><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
+      <div class="sec-uso">Se usa en: ${esc([...new Set(c.cables[sec].flatMap(x => x.uso))].join(', '))}</div>
+      <table>${c.cables[sec].map(x => `<tr><td><span class="dot c-${x.col}"></span>${fn(x)}<span class="sub">Para: ${esc(x.uso.join(', '))}</span></td><td class="n">${fmt(x.m)} m</td></tr>`).join('')}</table>`; }).join('')}
+  </div><p class="note">Colores según la regla 030-036 del CNE: fases en rojo, negro y azul; neutro en blanco o gris; tierra en verde o verde con franjas amarillas, que no se usa para nada más. El CNE no fija un color para el retorno del interruptor: es la misma fase interrumpida, por eso va en el color de esa fase. Se acostumbra marcarlo con cinta en los extremos para no confundirlo.</p><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
   ${grupos.map(g => { const it = c.matList.filter(x => x.g===g); return it.length ? `<div><h2>${g}</h2><div class="tw"><table>
     ${it.map(x => `<tr><td>${x.d}</td><td class="n">${fmt(x.q)} ${x.u}</td></tr>`).join('')}</table></div></div>` : ''; }).join('')}
   <div><h2>Herramientas para el cableado</h2><div class="tw"><table>
@@ -909,6 +931,7 @@ function generaPDF(c){
   if (y > 262){ doc.addPage(); y = 20; }
   doc.setFontSize(8.5); doc.setTextColor(90);
   doc.text(['Incluye limpieza de cajas antes de cablear, pruebas del tablero y rotulado de circuitos.',
+    S.pozo ? 'Incluye sistema de puesta a tierra: pozo y cable de tierra en cada circuito.' : 'No incluye sistema de puesta a tierra.',
     S.soloMO ? 'No incluye materiales: los compra el cliente según la lista de metrado.' : 'Los materiales se cotizan aparte de la mano de obra, con precios referenciales.',
     'Precios sujetos a visita técnica. Tubos obstruidos o trabajos de albañilería se cotizan aparte.'], mx, y);
   return doc.output('arraybuffer');
@@ -938,7 +961,8 @@ function drawCotiza(c){
     <button type="button" data-tipo="mo" aria-pressed="${S.soloMO}">Solo mano de obra<small>El cliente compra los materiales</small></button>
     <button type="button" data-tipo="full" aria-pressed="${!S.soloMO}">Mano de obra y materiales<small>Cada uno con su total</small></button>
   </div></div>
-  <div class="group"><div class="row"><label class="lbl" for="c-igv"><b>Incluir IGV 18 %</b><span class="hint">Marcado: sale como línea al final. Sin marcar: precios normales, sin IGV</span></label><input class="chk" type="checkbox" id="c-igv" data-chk="igv" ${S.igv?'checked':''}></div></div>
+  <div class="group"><div class="row"><label class="lbl" for="c-igv"><b>Incluir IGV 18 %</b><span class="hint">Marcado: sale como línea al final. Sin marcar: precios normales, sin IGV</span></label><input class="chk" type="checkbox" id="c-igv" data-chk="igv" ${S.igv?'checked':''}></div>
+    ${fila(F('util','Utilidad y gastos generales','No se muestra al cliente: en el PDF va repartida dentro de cada precio','%',1,0))}</div>
   <div><h2>Resumen interno</h2><div class="tot">
     ${S.soloMO ? '' : `<div><span>Materiales</span><span>${money(c.totMat)}</span></div>`}
     <div><span>Mano de obra</span><span>${money(c.totMO)}</span></div>
@@ -948,8 +972,8 @@ function drawCotiza(c){
     <div class="grand"><span>Total</span><span>${money(c.total)}</span></div>
   </div></div>
   <div class="kv">
-    <div><span>Costo por m²</span><b>${money(c.total/S.area)}</b></div>
-    <div><span>Costo por punto</span><b>${c.puntos ? money(c.total/c.puntos) : '-'}</b><small>${c.puntos} puntos en total</small></div>
+    <div><span>Promedio por m²</span><b>${money(c.total/S.area)}</b><small>total ÷ ${fmt(S.area)} m²</small></div>
+    <div><span>Promedio por punto</span><b>${c.puntos ? money(c.total/c.puntos) : '-'}</b><small>total ÷ ${c.puntos} puntos. Incluye alimentador, tablero y cargas especiales</small></div>
   </div>
   <button class="btn" type="button" id="btn-pdf">Descargar cotización en PDF</button>
   ${PUEDE_COMPARTIR ? `<button class="btn" type="button" id="btn-share">Enviar PDF por WhatsApp u otra app</button>` : ''}
@@ -1009,7 +1033,9 @@ function autoRecorridos(){
     el.disabled = S.auto; document.querySelectorAll('button[data-k="'+k+'"]').forEach(b => b.disabled = S.auto); });
 }
 function update(){
+  const activo = document.activeElement && document.activeElement.id;
   autoRecorridos();
+  const ta = $('#tierra-aviso'); if (ta) ta.hidden = !!S.pozo;
   const ci = $('#f-igv'); if (ci) ci.checked = S.igv;
   if (!S.zonas[S.zona]) S.zona = 0;
   S.pp = S.zonas[S.zona].p;
@@ -1019,6 +1045,7 @@ function update(){
   $('#h-lbl').textContent = S.soloMO ? 'Total (solo mano de obra)' : 'Total cotización';
   $('#h-meta').innerHTML = `${fmt(S.area)} m² · ${c.puntos} puntos<br>${fmt(c.demanda/1000,1)} kW · general ${c.sis.polos}×${c.gen} A`;
   drawTablero(c); drawMetrado(c); drawCotiza(c); drawFormulas(c);
+  if (activo){ const el = document.getElementById(activo); if (el && el !== document.activeElement) el.focus(); }
   save();
 }
 function showTab(t){
