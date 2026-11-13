@@ -130,6 +130,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 .sec-uso{padding:6px 10px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
 .mline{display:flex;align-items:center;justify-content:flex-end;gap:4px;white-space:nowrap;font-size:12.5px;line-height:1.6}
 .mline .dot{margin-right:2px}
+.trtot td{font-weight:700;background:var(--soft)}
 .pasos{margin:10px 0 6px;padding-left:22px;font-size:13.5px;display:flex;flex-direction:column;gap:5px}
 .step button.mini{width:auto;padding:0 10px;font-size:13px}
 .tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent)}
@@ -138,7 +139,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <body>
 <div class="app">
   <header class="head gut">
-    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 14</span></div>
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 15</span></div>
     <div class="total-row">
       <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
       <div class="head-meta" id="h-meta"></div>
@@ -167,7 +168,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
-const APP_VERSION = 14;   // subir junto con VERSION en sw.js en cada publicación
+const APP_VERSION = 15;   // subir junto con VERSION en sw.js en cada publicación
 /* ---------- Estado (ejemplo cargado) ---------- */
 const DEF = {
   cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', difModo:'general', area:120, pisos:2, dist:15,
@@ -849,7 +850,28 @@ function drawTablero(c){
   </div><p class="note">Iluminación, tomacorrientes y cargas menores a 1 500 W ya están dentro de la carga básica por área.</p></div>`;
 }
 
+// Tablas de metrado: por circuito (columnas por color) y totales por color y calibre
+function metradoTablas(c){
+  const NOM = {rojo:'Rojo', negro:'Negro', azul:'Azul', blanco:'Blanco'};
+  const cols = ['rojo','negro','azul','blanco'].filter(k => c.cabCirc.some(r => r.lin.some(l => l.col===k && l.rol==='fase')));
+  const hayRet = c.cabCirc.some(r => r.lin.some(l => l.rol==='ret')), hayT = c.cabCirc.some(r => r.lin.some(l => l.rol==='tierra'));
+  const suma = (r, f) => { const t = r.lin.filter(f).reduce((s,l) => s+l.m, 0); return t ? fmt(t) : '–'; };
+  const head = ['Circuito','Interruptor','Cable'].concat(cols.map(k => NOM[k]), hayRet ? ['Retorno'] : [], hayT ? ['Tierra'] : []);
+  const body = c.cabCirc.map(r => [r.n.replace(' → ',' a '), r.itm ? r.itm+' A' : '–', r.sec+' mm²']
+    .concat(cols.map(k => suma(r, l => l.col===k && l.rol==='fase')), hayRet ? [suma(r, l => l.rol==='ret')] : [], hayT ? [suma(r, l => l.rol==='tierra')] : []));
+  // Los totales suman las mismas filas por circuito, para que cuadren exactamente
+  const secs = [...new Set(c.cabCirc.map(r => r.sec))].sort((a,b) => a-b);
+  const lins = s => c.cabCirc.filter(r => r.sec===s).flatMap(r => r.lin);
+  const colsT = ['rojo','negro','azul','blanco','verde'].filter(k => secs.some(s => lins(s).some(l => l.col===k)));
+  const NT = {rojo:'Rojo', negro:'Negro', azul:'Azul', blanco:'Blanco', verde:'Tierra (verde)'};
+  const tot = (s,k) => lins(s).filter(l => l.col===k).reduce((t,l) => t+l.m, 0), totS = s => lins(s).reduce((t,l) => t+l.m, 0);
+  const headT = ['Color'].concat(secs.map(s => s+' mm²'));
+  const bodyT = colsT.map(k => [NT[k]].concat(secs.map(s => { const v = tot(s,k); return v ? fmt(v)+' m' : '–'; })));
+  const footT = [['Total'].concat(secs.map(s => fmt(totS(s))+' m')), ['Rollos de 100 m'].concat(secs.map(s => s<=6 ? String(Math.ceil(totS(s)/100)) : 'por metro'))];
+  return {head, body, secs, colsT, headT, bodyT, footT};
+}
 function drawMetrado(c){
+  const mt = metradoTablas(c);
   const nomF = {rojo:'Fase L1 · rojo', negro: c.sis.polos===2 ? 'Fase L2 · negro' : 'Fase L2 · negro', azul:'Fase L3 · azul', blanco:'Neutro · blanco'};
   const fn = x => x.rol==='tierra' ? 'Tierra · verde o verde/amarillo' : x.rol==='ret' ? 'Retorno de interruptor · '+x.col : nomF[x.col];
   const secs = Object.keys(c.cables).map(Number).sort((a,b)=>a-b);
@@ -862,11 +884,12 @@ function drawMetrado(c){
       <td class="n">${r.lin.map(l => `<span class="mline"><span class="dot c-${l.col}"></span>${l.rol==='tierra' ? 'Tierra' : l.rol==='ret' ? 'Retorno' : ({rojo:'Rojo',negro:'Negro',azul:'Azul',blanco:'Blanco'})[l.col]} ${fmt(l.m)} m</span>`).join('')}</td></tr>`).join('')}
   </table></div>
   <p class="note">Cada circuito usa un solo calibre para sus fases y su tierra. "Soporta" es la corriente que aguanta el cable dentro de tubo; debe ser igual o mayor que su interruptor para que el interruptor proteja al cable (regla 080-104).</p></div>
-  <div><h2>Compra por calibre y color</h2><div class="tw">
-    ${secs.map(sec => { const tot = c.cables[sec].reduce((t,x)=>t+x.m,0);
-      return `<div class="sec-head"><span>Cable ${sec} mm² <small>${AWG[sec] || ''}</small></span><span>${fmt(tot)} m · ${sec<=6 ? Math.ceil(tot/100)+' rollo(s) de 100 m' : 'por metro'}</span></div>
-      <table>${c.cables[sec].map(x => `<tr><td><span class="dot c-${x.col}"></span>${fn(x)}</td><td class="n">${fmt(x.m)} m</td></tr>`).join('')}</table>`; }).join('')}
-  </div><p class="note">Colores según la regla 030-036 del CNE: fases en rojo, negro y azul; neutro en blanco o gris; tierra en verde o verde con franjas amarillas, que no se usa para nada más. El CNE no fija un color para el retorno del interruptor: es la misma fase interrumpida, por eso va en el color de esa fase. Se acostumbra marcarlo con cinta en los extremos para no confundirlo.</p><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
+  <div><h2>Totales de cable por color</h2><div class="tw"><table>
+    <tr><th>Color</th>${mt.secs.map(s => `<th class="n">${s} mm²<br><small>${AWG[s] || ''}</small></th>`).join('')}</tr>
+    ${mt.bodyT.map((row,i) => `<tr><td><span class="dot c-${mt.colsT[i]}"></span>${row[0]}</td>${row.slice(1).map(v => `<td class="n">${v}</td>`).join('')}</tr>`).join('')}
+    ${mt.footT.map(row => `<tr class="trtot"><td>${row[0]}</td>${row.slice(1).map(v => `<td class="n">${v}</td>`).join('')}</tr>`).join('')}
+  </table></div>
+  <p class="note">El rojo incluye los retornos de interruptor. Cada columna es un calibre: el cable se compra por calibre y color.</p><p class="note">Colores según la regla 030-036 del CNE: fases en rojo, negro y azul; neutro en blanco o gris; tierra en verde o verde con franjas amarillas, que no se usa para nada más. El CNE no fija un color para el retorno del interruptor: es la misma fase interrumpida, por eso va en el color de esa fase. Se acostumbra marcarlo con cinta en los extremos para no confundirlo.</p><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
   ${grupos.map(g => { const it = c.matList.filter(x => x.g===g); return it.length ? `<div><h2>${g}</h2><div class="tw"><table>
     ${it.map(x => `<tr><td>${x.d}</td><td class="n">${fmt(x.q)} ${x.u}</td></tr>`).join('')}</table></div></div>` : ''; }).join('')}
   <div><h2>Herramientas para el cableado</h2><div class="tw"><table>
@@ -951,6 +974,20 @@ function generaPDF(c){
     S.pozo ? 'Incluye sistema de puesta a tierra: pozo y cable de tierra en cada circuito.' : 'No incluye sistema de puesta a tierra.',
     S.soloMO ? 'No incluye materiales: los compra el cliente según la lista de metrado.' : 'Los materiales se cotizan aparte de la mano de obra, con precios referenciales.',
     'Precios sujetos a visita técnica. Tubos obstruidos o trabajos de albañilería se cotizan aparte.'], mx, y);
+  // Hoja de metrado de cable
+  doc.addPage(); const mt = metradoTablas(c), ym = 18;
+  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(20); doc.text('METRADO DE CABLE', mx, ym);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90);
+  doc.text('Cable THW-90 o libre de halógenos. Colores según la regla 030-036 del CNE. Incluye '+S.desp+' % de desperdicio.', mx, ym+6);
+  doc.setTextColor(20); doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.text('Cable por circuito (metros)', mx, ym+14);
+  doc.autoTable(Object.assign({}, base, {startY:ym+17, head:[mt.head], body:mt.body, columnStyles:{0:{cellWidth:46}},
+    didParseCell: d => { if (d.column.index>=3) d.cell.styles.halign = 'right'; }}));
+  let yt = doc.lastAutoTable.finalY + 10; if (yt > 250){ doc.addPage(); yt = 20; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20); doc.text('Totales de cable por color y calibre', mx, yt);
+  doc.autoTable(Object.assign({}, base, {startY:yt+3, head:[mt.headT], body:mt.bodyT, foot:mt.footT, columnStyles:{0:{cellWidth:36}},
+    didParseCell: d => { if (d.column.index>=1) d.cell.styles.halign = 'right'; }}));
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90);
+  doc.text('El rojo incluye los retornos de interruptor. Cada circuito usa el mismo calibre para sus fases y su tierra.', mx, doc.lastAutoTable.finalY + 7);
   return doc.output('arraybuffer');
 }
 async function descargaPDF(compartir){
