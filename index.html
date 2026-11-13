@@ -135,7 +135,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <body>
 <div class="app">
   <header class="head gut">
-    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 11</span></div>
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 12</span></div>
     <div class="total-row">
       <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
       <div class="head-meta" id="h-meta"></div>
@@ -164,7 +164,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
-const APP_VERSION = 11;   // subir junto con VERSION en sw.js en cada publicación
+const APP_VERSION = 12;   // subir junto con VERSION en sw.js en cada publicación
 /* ---------- Estado (ejemplo cargado) ---------- */
 const DEF = {
   cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', difModo:'general', area:120, pisos:2, dist:15,
@@ -507,12 +507,13 @@ function dibujaEsquema(c){
     A.push(aparato(dx,yT,2,'dif',c.idA+' A','Dif. '+(g+1)));
     if (n){
       // Del diferencial (sale por abajo) a sus termomagnéticos (entran por arriba)
-      const r2b = dx+2*PW+4, r2a = dx+2*PW+10;
-      W.push(alimentaFila([{col:a, h:yT-12, xs:xs.map(x => x+13), pre:[[da,yB-8],[da,yB+17],[r2a,yB+17],[r2a,yT-12]]},
-        {col:b, h:yT-22, xs:xs.map(x => x+39), pre:[[db,yB-8],[db,yB+10],[r2b,yB+10],[r2b,yT-22]]}], yT, seg, salto));
+      const xa = xs[n-1]+13, xb = xs[n-1]+39, r2b = dx+2*PW+4, r2a = dx+2*PW+10;
+      W.push(seg([[da,yB-8],[da,yB+17],[r2a,yB+17],[r2a,yT-12],[xa,yT-12],[xa,yT+8]],a));
+      W.push(seg([[db,yB-8],[db,yB+10],[r2b,yB+10],[r2b,yT-22],[xb,yT-22],[xb,yT+8]],b));
       // Tierra de la fila: sale de la barra de tierra y entra a cada tubo junto a los otros dos cables
       V.push(seg([[366,yB+22],[xs[0]+26,yB+22],[xs[0]+26,yB+42]],'verde')); D.push(dot(366,yB+22,'verde'));
       gr.circ.forEach((it,i) => { const x = xs[i];
+        if (i<n-1){ W.push(seg([[x+13,yT-12],[x+13,yT+8]],a), salto([[x+39,yT-17],[x+39,yT-7]]), seg([[x+39,yT-22],[x+39,yT+8]],b)); D.push(dot(x+13,yT-12,a), dot(x+39,yT-22,b)); }
         if (i>0){ V.push(seg([[x+26,yB+22],[x+26,yB+42]],'verde')); D.push(dot(x+26,yB+22,'verde')); W.push(salto([[x+13,yB+16],[x+13,yB+28]])); }
         W.push(seg([[x+13,yB-8],[x+13,yB+42]],a), salto([[x+39,yB+16],[x+39,yB+28]]), seg([[x+39,yB-8],[x+39,yB+42]],b));
         U.push(tubo(x+5,yB+38,42));
@@ -605,17 +606,17 @@ function dibujaPorCircuito(c){
     // Qué bornes usa cada conductor en esta fila
     const usos = cond.map(() => []);
     for (let j=0;j<n;j++){ const [ia,ib] = parFases(nc, b.desde+j); usos[ia].push(xs[j]+13); usos[ib].push(xs[j]+39); }
-    const fz = [];
     cond.forEach((col,k) => { if (!usos[k].length) return;
-      const h = alto(yI,k);
+      const h = alto(yI,k), fin = Math.max(...usos[k]);
+      if (k>0) usos[k].forEach(x => W.push(salto([[x,h+5],[x,yI-7]])));
       if (bi===0){ const r = gx+gw+4+(nc-1-k)*5; enBloque0.add(k);
-        fz.push({col, h, xs:usos[k], pre:[[gt(k),gB-8],[gt(k),prof(k)],[r,prof(k)],[r,h]]});
+        W.push(seg([[gt(k),gB-8],[gt(k),prof(k)],[r,prof(k)],[r,h],[fin,h],[fin,yI+8]],col));
       } else {
-        fz.push({col, h, xs:usos[k], pre:[[trX(k),h]], antes:salto([[trX(k)+2.6,h],[X0-1,h]])});
+        W.push(salto([[trX(k)+2.6,h],[X0-1,h]]), seg([[trX(k),h],[fin,h],[fin,yI+8]],col));
         D.push(dot(trX(k),h,col)); trFin[k] = Math.max(trFin[k], h);
       }
+      usos[k].forEach(x => { if (x!==fin){ W.push(seg([[x,h],[x,yI+8]],col)); D.push(dot(x,h,col)); } });
     });
-    W.push(alimentaFila(fz, yI, seg, salto));
     if (n){ V.push(seg([[366,yDB+22],[xs[0]+26,yDB+22],[xs[0]+26,yDB+42]],'verde')); D.push(dot(366,yDB+22,'verde')); }
     for (let j=0;j<n;j++){ const i = b.desde+j, it = c.circ[i], x = xs[j], [ia,ib] = parFases(nc,i), a = cond[ia], bb = cond[ib];
       // Del termomagnético baja directo a su diferencial
@@ -690,22 +691,24 @@ function dibujaGeneral(c){
   const base = gB+12+6*nc, prof = k => base+6*k, alto = (yT,k) => yT-12-8*(nc-1-k), sp = nc>3 ? 4 : 5, trX = k => 15-(nc-1-k)*sp, trFin = cond.map(() => 0);
   const usosDe = b => { const u = cond.map(() => []); for (let j=0;j<b.n;j++){ const [ia,ib] = parFases(nc, b.desde+j); u[ia].push(b.xs[j]+13); u[ib].push(b.xs[j]+39); } return u; };
   const u0 = usosDe(blk[0]);
-  const f0 = [];
   cond.forEach((col,k) => { if (!u0[k].length) return;
-    const h = alto(gy,k), r = dx+gw+3+k*5;
-    f0.push({col, h, xs:u0[k], pre:[[dt(k),gB-8],[dt(k),prof(k)],[r,prof(k)],[r,h]], antes:salto([[dt(k)+5,prof(k)],[r-2,prof(k)]])});
+    const h = alto(gy,k), fin = Math.max(...u0[k]), r = dx+gw+3+k*5;
+    W.push(salto([[dt(k)+5,prof(k)],[r-2,prof(k)]]));
+    u0[k].forEach(x => { if (k<nc-1) W.push(salto([[x,h+5],[x,gy-7]])); });
+    W.push(seg([[dt(k),gB-8],[dt(k),prof(k)],[r,prof(k)],[r,h],[fin,h],[fin,gy+8]],col));
+    u0[k].forEach(x => { if (x!==fin){ W.push(seg([[x,h],[x,gy+8]],col)); D.push(dot(x,h,col)); } });
   });
-  W.push(alimentaFila(f0, gy, seg, salto));
   blk.forEach((b,bi) => {
     const {yT, xs, n} = b, yB = yT+DH;
     R.push(riel(yT));
-    if (bi>0){ const u = usosDe(b), fz = [];
+    if (bi>0){ const u = usosDe(b);
       cond.forEach((col,k) => { if (!u[k].length) return;
-        const h = alto(yT,k);
-        fz.push({col, h, xs:u[k], pre:[[trX(k),h]], antes:salto([[trX(k)+2.6,h],[X0-1,h]])});
+        const h = alto(yT,k), fin = Math.max(...u[k]);
+        u[k].forEach(x => { if (k<nc-1) W.push(salto([[x,h+5],[x,yT-7]])); });
+        W.push(salto([[trX(k)+2.6,h],[X0-1,h]]), seg([[trX(k),h],[fin,h],[fin,yT+8]],col));
         D.push(dot(trX(k),h,col)); trFin[k] = Math.max(trFin[k], h);
+        u[k].forEach(x => { if (x!==fin){ W.push(seg([[x,h],[x,yT+8]],col)); D.push(dot(x,h,col)); } });
       });
-      W.push(alimentaFila(fz, yT, seg, salto));
     }
     if (n){ V.push(seg([[366,yB+22],[xs[0]+26,yB+22],[xs[0]+26,yB+42]],'verde')); D.push(dot(366,yB+22,'verde')); }
     for (let j=0;j<n;j++){ const i = b.desde+j, it = c.circ[i], x = xs[j], [ia,ib] = parFases(nc,i), a = cond[ia], bb = cond[ib];
@@ -768,31 +771,6 @@ function aparatoReal(x,y,polos,tipo,cap,rot){
   s += `<rect x="${x+3}" y="${y+55}" width="${w-6}" height="11" rx="2" fill="#FFF7C2" stroke="#B59B1A" stroke-width=".8"/>
     <text x="${x+w/2}" y="${y+63.3}" font-size="7.8" font-weight="700" text-anchor="middle" fill="${ink}">${rot}</text>`;
   return s;
-}
-
-/* ---------- Puentes en arco entre interruptores ---------- */
-// Une en arco los bornes de entrada de un mismo conductor, de un interruptor al siguiente
-function arcos(xs, yT, col, nivel){
-  const HEX = {rojo:'#D62F2F', negro:'#161616', azul:'#2563EB', blanco:'#FFFFFF', verde:'#1E9E4A'};
-  const o = [...xs].sort((a,b) => a-b), y = yT+8, hh = 18 + 7*nivel;
-  let d = '';
-  for (let i=0;i<o.length-1;i++) d += `M${o[i]} ${y} C${o[i]} ${y-hh} ${o[i+1]} ${y-hh} ${o[i+1]} ${y} `;
-  if (!d) return '';
-  return `<path d="${d}" fill="none" stroke="#4B5563" stroke-width="5" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${HEX[col]}" stroke-width="3.2" stroke-linecap="round"/>`;
-}
-// Cada conductor llega al primer interruptor de la fila y de ahí sigue en arcos.
-// Se dibujan de arriba hacia abajo; donde un cable más bajo cruza la bajada de uno más alto, se corta la de arriba.
-function alimentaFila(feeds, yT, seg, salto){
-  const out = [], hechos = [];
-  [...feeds].sort((p,q) => p.h-q.h).forEach(f => {
-    const first = Math.min(...f.xs), r = f.pre[f.pre.length-1][0];
-    if (f.antes) out.push(f.antes);
-    hechos.forEach(x => { if (x > r+3 && x < first-3) out.push(salto([[x,f.h-5],[x,f.h+5]])); });
-    out.push(seg([...f.pre,[first,f.h],[first,yT+8]], f.col));
-    hechos.push(first);
-  });
-  feeds.forEach((f,i) => out.push(arcos(f.xs, yT, f.col, i)));
-  return out.join('');
 }
 
 /* ---------- Pestañas de resultados ---------- */
