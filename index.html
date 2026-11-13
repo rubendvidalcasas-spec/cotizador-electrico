@@ -127,6 +127,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 
 .tabs{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
 .tabs button{flex:1;min-height:54px;border:0;background:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);border-top:3px solid transparent;padding:4px 1px}
+.pasos{margin:10px 0 6px;padding-left:22px;font-size:13.5px;display:flex;flex-direction:column;gap:5px}
 .step button.mini{width:auto;padding:0 10px;font-size:13px}
 .tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent)}
 </style>
@@ -457,6 +458,62 @@ function dibujaTablero(c){
   return o;
 }
 
+/* ---------- Esquema de conexión: qué cable va a cada interruptor ---------- */
+function gruposDif(c){
+  const n = Math.max(1, Math.ceil(c.circ.length/c.nID)), cond = c.sis.polos===2 ? ['rojo',c.B] : c.sis.polos===3 ? ['rojo','negro','azul'] : ['rojo','negro','azul','blanco'];
+  const par = g => c.sis.polos===2 ? [0,1] : c.sis.polos===3 ? [[0,1],[1,2],[2,0]][g%3] : [g%3,3];
+  const grupos = [];
+  for (let g=0;g<c.nID;g++) grupos.push({par:par(g), circ:c.circ.map((x,i) => ({x,i})).slice(g*n,(g+1)*n)});
+  return {cond, grupos};
+}
+function dibujaEsquema(c){
+  const HEX = {rojo:'#D62F2F', negro:'#161616', azul:'#2563EB', blanco:'#FFFFFF', verde:'#1E9E4A'}, ink = '#1B2430';
+  const {cond, grupos} = gruposDif(c), bx = cond.map((_,i) => 22+i*10), VW = 372, RH = 40;
+  const corto = {'Tomas cocina y lavandería':'Cocina y lavandería', 'Cocina eléctrica o de inducción':'Cocina eléctrica'};
+  const seg = (pts, col) => { const d = pts.map(p => p.join(',')).join(' ');
+    return `<polyline points="${d}" fill="none" stroke="#4B5563" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${d}" fill="none" stroke="${HEX[col]}" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>`; };
+  const dot = (x,y,col) => `<circle cx="${x}" cy="${y}" r="3.2" fill="${HEX[col]}" stroke="#4B5563" stroke-width="1"/>`;
+  const box = (x,y,w,h,t1,t2,fill) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${fill||'#FFFFFF'}" stroke="#566170" stroke-width="1.2"/>`
+    + (t1 ? `<text x="${x+w/2}" y="${y+h/2+(t2?-2:3.5)}" font-size="9.5" font-weight="700" text-anchor="middle" fill="${ink}">${t1}</text>` : '')
+    + (t2 ? `<text x="${x+w/2}" y="${y+h/2+9}" font-size="7.8" text-anchor="middle" fill="${ink}">${t2}</text>` : '');
+  const wires = [], boxes = [], dots = [], labels = [], finBus = cond.map(() => 82), filas = [];
+  let y = 92;
+  grupos.forEach((gr,g) => {
+    const [ia,ib] = gr.par, a = cond[ia], b = cond[ib], ya = y+13, yb = y+27;
+    const rows = Math.max(gr.circ.length,1), yFin = y+20+(rows-1)*RH;
+    wires.push(seg([[bx[ia],ya],[72,ya]],a), seg([[bx[ib],yb],[72,yb]],b));
+    dots.push(dot(bx[ia],ya,a), dot(bx[ib],yb,b)); finBus[ia] = Math.max(finBus[ia],ya); finBus[ib] = Math.max(finBus[ib],yb);
+    wires.push(seg([[124,ya],[146,ya],[146,yFin-7]],a), seg([[124,yb],[135,yb],[135,yFin+7]],b));
+    boxes.push(box(72,y,52,40,'Dif. '+(g+1), c.idA+' A · 30 mA','#FCEFD8'));
+    gr.circ.forEach((it,r) => { const yr = y+20+r*RH, nom = corto[it.x.nombre.replace(/ \d+$/,'')] ? it.x.nombre.replace(it.x.nombre.replace(/ \d+$/,''), corto[it.x.nombre.replace(/ \d+$/,'')]) : it.x.nombre;
+      wires.push(seg([[146,yr-7],[162,yr-7]],a), seg([[135,yr+7],[162,yr+7]],b));
+      if (r>0) dots.push(dot(146,yr-7,a), dot(135,yr+7,b));
+      wires.push(seg([[206,yr-7],[228,yr-7]],a), seg([[206,yr+7],[228,yr+7]],b), seg([[364,yr],[350,yr]],'verde'));
+      dots.push(dot(228,yr-7,a), dot(228,yr+7,b), dot(350,yr,'verde'), dot(364,yr,'verde'));
+      boxes.push(box(162,yr-15,44,30,it.x.itm+' A'));
+      labels.push(`<text x="236" y="${yr-2}" font-size="8.3" fill="${ink}"><tspan font-weight="700">C${it.i+1}</tspan> ${esc(nom)}</text><text x="236" y="${yr+9}" font-size="7.8" fill="#4B5563">${it.x.sec} mm² + tierra ${it.x.tierra}</text>`);
+      filas.push(yr);
+    });
+    y = yFin + 36;
+  });
+  const yB = y, VH = yB + 52, y1 = filas.length ? filas[0] : yB;
+  let o = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" role="img" aria-label="Esquema de conexión del tablero" font-family="inherit">
+    <rect x="1" y="1" width="${VW-2}" height="${VH-2}" rx="6" fill="#F4F6F9" stroke="#9AA6B5"/>`;
+  cond.forEach((col,i) => o += seg([[bx[i],10],[bx[i],finBus[i]]], col));
+  o += seg([[364,y1],[364,yB]],'verde') + wires.join('');
+  o += box(14,40,bx[bx.length-1]-14+8,30) + boxes.join('') + dots.join('') + labels.join('');
+  const xt = bx[bx.length-1] + 18;
+  o += `<text x="${xt}" y="22" font-size="8.8" fill="${ink}">Alimentador del medidor: ${c.sis.polos}×${c.fs} mm² + tierra ${c.tGen} mm²</text>
+    <text x="${xt}" y="54" font-size="9.5" font-weight="700" fill="${ink}">Interruptor general ${c.sis.polos}×${c.gen} A</text>
+    <text x="${xt}" y="65" font-size="7.8" fill="#4B5563">Entra por arriba, sale por abajo</text>
+    <rect x="236" y="${yB}" width="132" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
+    <text x="228" y="${yB+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>`;
+  o += seg([[300,yB+13],[300,yB+30]],'verde');
+  o += `<path d="M288 ${yB+31}h24M292 ${yB+36}h16M296 ${yB+41}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
+    <text x="320" y="${yB+38}" font-size="8.3" fill="${ink}">Pozo a tierra</text></svg>`;
+  return o;
+}
+
 /* ---------- Pestañas de resultados ---------- */
 function drawTablero(c){
   const avisos = [];
@@ -476,6 +533,17 @@ function drawTablero(c){
   <div><h2>Así queda el tablero</h2><div class="panel-fig">${dibujaTablero(c)}</div>
     <div class="legend"><span><span class="dot c-rojo"></span>Fase</span><span><span class="dot c-${c.B}"></span>${c.B==='blanco'?'Neutro':'Fase 2'}</span><span><span class="dot c-verde"></span>Tierra</span><span>Punteado = espacio de reserva</span></div>
     <p class="note">${Array.from({length:c.nID}, (_,g) => { const n = Math.ceil(c.circ.length/c.nID), a = g*n+1, b = Math.min((g+1)*n, c.circ.length); return a<=b ? 'Dif. '+(g+1)+' protege '+(a===b ? 'C'+a : 'C'+a+' a C'+b) : ''; }).filter(Boolean).join('. ')}.</p></div>
+  <div><h2>Esquema de conexión</h2><div class="panel-fig">${dibujaEsquema(c)}</div>
+    <ol class="pasos">
+      <li>Corta la energía en el medidor y comprueba con el probador que no hay tensión.</li>
+      <li>El alimentador entra por arriba del interruptor general.</li>
+      <li>De la salida del general sale un puente o peine a la entrada de cada diferencial.</li>
+      <li>Cada diferencial alimenta solo a los termomagnéticos de su grupo.</li>
+      <li>De cada termomagnético salen los dos cables de su circuito, con los colores del esquema.</li>
+      <li>La tierra no pasa por ningún interruptor: va de la barra de tierra a cada circuito y al pozo.</li>
+      ${c.tri ? `<li>${gruposDif(c).grupos.map((gr,g) => 'Dif. '+(g+1)+' usa '+gr.par.map(i => ({rojo:'R rojo',negro:'S negro',azul:'T azul',blanco:'neutro blanco'})[gruposDif(c).cond[i]]).join(' y ')).join('. ')}. Así la carga queda repartida entre las fases.</li>` : ''}
+    </ol>
+    <p class="note">El esquema muestra el orden eléctrico (general, diferencial, termomagnético). En el gabinete pueden ir en filas distintas, como en el dibujo de arriba.</p></div>
   <div><h2>Cuadro de circuitos</h2><div class="tw"><table>
     <tr><th>Circuito</th><th class="n">Carga</th><th class="n">ITM</th><th class="n">Cable</th></tr>
     ${c.circ.map((x,i) => `<tr><td>C${i+1} · ${x.nombre}<span class="sub">${x.det} · ${fmt(x.i,1)} A</span></td><td class="n">${fmt(x.w)} W</td><td class="n">2×${x.itm} A</td><td class="n">${x.sec} mm²<span class="sub">T ${x.tierra}</span></td></tr>`).join('')}
