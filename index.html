@@ -131,6 +131,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 .mline{display:flex;align-items:center;justify-content:flex-end;gap:4px;white-space:nowrap;font-size:12.5px;line-height:1.6}
 .mline .dot{margin-right:2px}
 .trtot td{font-weight:700;background:var(--soft)}
+.mtot{font-weight:700;border-top:1px solid var(--line);margin-top:2px;padding-top:2px}
 .pasos{margin:10px 0 6px;padding-left:22px;font-size:13.5px;display:flex;flex-direction:column;gap:5px}
 .step button.mini{width:auto;padding:0 10px;font-size:13px}
 .tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent)}
@@ -139,7 +140,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <body>
 <div class="app">
   <header class="head gut">
-    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 15</span></div>
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 16</span></div>
     <div class="total-row">
       <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
       <div class="head-meta" id="h-meta"></div>
@@ -168,7 +169,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
-const APP_VERSION = 15;   // subir junto con VERSION en sw.js en cada publicación
+const APP_VERSION = 16;   // subir junto con VERSION en sw.js en cada publicación
 /* ---------- Estado (ejemplo cargado) ---------- */
 const DEF = {
   cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', difModo:'general', area:120, pisos:2, dist:15,
@@ -307,7 +308,8 @@ function compute(){
   Object.keys(cab).forEach(key => { const [sec,col,rol] = key.split('|'); (cables[sec] = cables[sec]||[]).push({col, rol, m:Math.ceil(cab[key]), uso:[...usoK[key]]}); });
   Object.values(cables).forEach(l => l.sort((x,y) => peso(x)-peso(y)));
   // Una fila por circuito: su interruptor, su calibre, lo que soporta el cable y los metros de cada color
-  const linDe = u => Object.keys(filasC[u] || {}).map(k => { const [col,rol] = k.split('|'); return {col, rol, m:Math.ceil(filasC[u][k])}; }).sort((x,y) => peso(x)-peso(y));
+  const linDe = u => { const t = {}; Object.keys(filasC[u] || {}).forEach(k => { const col = k.split('|')[0]; t[col] = (t[col]||0) + filasC[u][k]; });
+    return Object.keys(t).map(col => ({col, rol: col==='verde' ? 'tierra' : 'fase', m:Math.ceil(t[col])})).sort((x,y) => ordenC[x.col]-ordenC[y.col]); };
   const cabCirc = circ.map((x,i) => { const u = 'C'+(i+1)+' '+x.nombre.replace(/ \d+$/,''); return {n:u, itm:x.itm, sec:x.sec, amp:ampDe(x.sec), lin:linDe(u)}; });
   cabCirc.push({n:'Alimentador medidor → tablero', itm:gen, sec:fs, amp:ampDe(fs), lin:linDe('Alimentador medidor → tablero')});
   if (s.pozo) cabCirc.push({n:'Barra de tierra → pozo a tierra', itm:0, sec:tGen, amp:0, lin:linDe('Barra de tierra → pozo a tierra')});
@@ -852,23 +854,21 @@ function drawTablero(c){
 
 // Tablas de metrado: por circuito (columnas por color) y totales por color y calibre
 function metradoTablas(c){
-  const NOM = {rojo:'Rojo', negro:'Negro', azul:'Azul', blanco:'Blanco'};
-  const cols = ['rojo','negro','azul','blanco'].filter(k => c.cabCirc.some(r => r.lin.some(l => l.col===k && l.rol==='fase')));
-  const hayRet = c.cabCirc.some(r => r.lin.some(l => l.rol==='ret')), hayT = c.cabCirc.some(r => r.lin.some(l => l.rol==='tierra'));
-  const suma = (r, f) => { const t = r.lin.filter(f).reduce((s,l) => s+l.m, 0); return t ? fmt(t) : '–'; };
-  const head = ['Circuito','Interruptor','Cable'].concat(cols.map(k => NOM[k]), hayRet ? ['Retorno'] : [], hayT ? ['Tierra'] : []);
+  const NOM = {rojo:'Rojo', negro:'Negro', azul:'Azul', blanco:'Blanco', verde:'Tierra'};
+  const cols = ['rojo','negro','azul','blanco','verde'].filter(k => c.cabCirc.some(r => r.lin.some(l => l.col===k)));
+  const de = (r,k) => (r.lin.find(l => l.col===k) || {m:0}).m, totR = r => r.lin.reduce((s,l) => s+l.m, 0);
+  const head = ['Circuito','Interruptor','Cable'].concat(cols.map(k => NOM[k]), ['Total']);
   const body = c.cabCirc.map(r => [r.n.replace(' → ',' a '), r.itm ? r.itm+' A' : '–', r.sec+' mm²']
-    .concat(cols.map(k => suma(r, l => l.col===k && l.rol==='fase')), hayRet ? [suma(r, l => l.rol==='ret')] : [], hayT ? [suma(r, l => l.rol==='tierra')] : []));
-  // Los totales suman las mismas filas por circuito, para que cuadren exactamente
-  const secs = [...new Set(c.cabCirc.map(r => r.sec))].sort((a,b) => a-b);
-  const lins = s => c.cabCirc.filter(r => r.sec===s).flatMap(r => r.lin);
-  const colsT = ['rojo','negro','azul','blanco','verde'].filter(k => secs.some(s => lins(s).some(l => l.col===k)));
-  const NT = {rojo:'Rojo', negro:'Negro', azul:'Azul', blanco:'Blanco', verde:'Tierra (verde)'};
-  const tot = (s,k) => lins(s).filter(l => l.col===k).reduce((t,l) => t+l.m, 0), totS = s => lins(s).reduce((t,l) => t+l.m, 0);
-  const headT = ['Color'].concat(secs.map(s => s+' mm²'));
-  const bodyT = colsT.map(k => [NT[k]].concat(secs.map(s => { const v = tot(s,k); return v ? fmt(v)+' m' : '–'; })));
-  const footT = [['Total'].concat(secs.map(s => fmt(totS(s))+' m')), ['Rollos de 100 m'].concat(secs.map(s => s<=6 ? String(Math.ceil(totS(s)/100)) : 'por metro'))];
-  return {head, body, secs, colsT, headT, bodyT, footT};
+    .concat(cols.map(k => de(r,k) ? fmt(de(r,k)) : '–'), [fmt(totR(r))]));
+  // Resumen: una fila por cada calibre y color, sumando las filas por circuito
+  const secs = [...new Set(c.cabCirc.map(r => r.sec))].sort((x,y) => x-y), res = [];
+  secs.forEach(s => cols.forEach(k => { const m = c.cabCirc.filter(r => r.sec===s).reduce((t,r) => t+de(r,k), 0);
+    if (m) res.push({sec:s, col:k, m}); }));
+  const tipo = 'THW-90 o libre de halógenos';
+  const headR = ['Tipo de cable','Calibre','Color','Total','Rollos de 100 m'];
+  const bodyR = res.map(x => [tipo, x.sec+' mm² ('+(AWG[x.sec] || '').replace('≈ ','')+')', NOM[x.col]+(x.col==='verde' ? ' (verde/amarillo)' : ''), fmt(x.m)+' m', x.sec<=6 ? String(Math.ceil(x.m/100)) : 'por metro']);
+  const footR = [['','','Total de cable', fmt(res.reduce((t,x) => t+x.m, 0))+' m', '']];
+  return {cols, head, body, res, headR, bodyR, footR, tipo};
 }
 function drawMetrado(c){
   const mt = metradoTablas(c);
@@ -881,15 +881,15 @@ function drawMetrado(c){
     <tr><th>Circuito</th><th>Cable</th><th class="n">Metros</th></tr>
     ${c.cabCirc.map(r => `<tr><td><b>${esc(r.n)}</b><span class="sub">${r.itm ? 'Interruptor '+r.itm+' A' : 'Sin interruptor'}</span></td>
       <td>${r.sec} mm²<span class="sub">${AWG[r.sec] || ''}${r.itm ? (r.amp>=r.itm ? ' · soporta '+r.amp+' A ✓' : ' · soporta '+r.amp+' A, menos que el interruptor') : ''}</span></td>
-      <td class="n">${r.lin.map(l => `<span class="mline"><span class="dot c-${l.col}"></span>${l.rol==='tierra' ? 'Tierra' : l.rol==='ret' ? 'Retorno' : ({rojo:'Rojo',negro:'Negro',azul:'Azul',blanco:'Blanco'})[l.col]} ${fmt(l.m)} m</span>`).join('')}</td></tr>`).join('')}
+      <td class="n">${r.lin.map(l => `<span class="mline"><span class="dot c-${l.col}"></span>${({rojo:'Rojo',negro:'Negro',azul:'Azul',blanco:'Blanco',verde:'Tierra'})[l.col]} ${fmt(l.m)} m</span>`).join('')}<span class="mline mtot">Total ${fmt(r.lin.reduce((s,l) => s+l.m, 0))} m</span></td></tr>`).join('')}
   </table></div>
   <p class="note">Cada circuito usa un solo calibre para sus fases y su tierra. "Soporta" es la corriente que aguanta el cable dentro de tubo; debe ser igual o mayor que su interruptor para que el interruptor proteja al cable (regla 080-104).</p></div>
-  <div><h2>Totales de cable por color</h2><div class="tw"><table>
-    <tr><th>Color</th>${mt.secs.map(s => `<th class="n">${s} mm²<br><small>${AWG[s] || ''}</small></th>`).join('')}</tr>
-    ${mt.bodyT.map((row,i) => `<tr><td><span class="dot c-${mt.colsT[i]}"></span>${row[0]}</td>${row.slice(1).map(v => `<td class="n">${v}</td>`).join('')}</tr>`).join('')}
-    ${mt.footT.map(row => `<tr class="trtot"><td>${row[0]}</td>${row.slice(1).map(v => `<td class="n">${v}</td>`).join('')}</tr>`).join('')}
+  <div><h2>Resumen de cable a comprar</h2><div class="tw"><table>
+    <tr><th>Tipo de cable</th><th>Calibre</th><th>Color</th><th class="n">Total</th><th class="n">Rollos</th></tr>
+    ${mt.res.map((x,i) => `<tr><td>${mt.tipo}</td><td>${x.sec} mm²<span class="sub">${AWG[x.sec] || ''}</span></td><td><span class="dot c-${x.col}"></span>${mt.bodyR[i][2]}</td><td class="n">${mt.bodyR[i][3]}</td><td class="n">${mt.bodyR[i][4]}</td></tr>`).join('')}
+    <tr class="trtot"><td colspan="3">Total de cable</td><td class="n">${mt.footR[0][3]}</td><td></td></tr>
   </table></div>
-  <p class="note">El rojo incluye los retornos de interruptor. Cada columna es un calibre: el cable se compra por calibre y color.</p><p class="note">Colores según la regla 030-036 del CNE: fases en rojo, negro y azul; neutro en blanco o gris; tierra en verde o verde con franjas amarillas, que no se usa para nada más. El CNE no fija un color para el retorno del interruptor: es la misma fase interrumpida, por eso va en el color de esa fase. Se acostumbra marcarlo con cinta en los extremos para no confundirlo.</p><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
+  <p class="note">En alumbrado, el rojo incluye el cable de retorno del interruptor, que va en el mismo color de su fase.</p><p class="note">Colores según la regla 030-036 del CNE: fases en rojo, negro y azul; neutro en blanco o gris; tierra en verde o verde con franjas amarillas, que no se usa para nada más. El CNE no fija un color para el retorno del interruptor: es la misma fase interrumpida, por eso va en el color de esa fase. Se acostumbra marcarlo con cinta en los extremos para no confundirlo.</p><p class="note">Incluye ${S.desp} % de desperdicio. ${S.sistema==='mono' ? 'En monofásico de 220 V entre dos fases el segundo conductor es negro. Si la red entrega neutro, ese conductor va en blanco.' : S.sistema==='tri220' ? 'Cada circuito de 220 V toma dos fases. El color real depende del par de fases asignado (rojo, negro, azul).' : 'Cada circuito de 220 V toma una fase y el neutro.'}</p></div>
   ${grupos.map(g => { const it = c.matList.filter(x => x.g===g); return it.length ? `<div><h2>${g}</h2><div class="tw"><table>
     ${it.map(x => `<tr><td>${x.d}</td><td class="n">${fmt(x.q)} ${x.u}</td></tr>`).join('')}</table></div></div>` : ''; }).join('')}
   <div><h2>Herramientas para el cableado</h2><div class="tw"><table>
@@ -980,14 +980,14 @@ function generaPDF(c){
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90);
   doc.text('Cable THW-90 o libre de halógenos. Colores según la regla 030-036 del CNE. Incluye '+S.desp+' % de desperdicio.', mx, ym+6);
   doc.setTextColor(20); doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.text('Cable por circuito (metros)', mx, ym+14);
-  doc.autoTable(Object.assign({}, base, {startY:ym+17, head:[mt.head], body:mt.body, columnStyles:{0:{cellWidth:46}},
+  doc.autoTable(Object.assign({}, base, {startY:ym+17, head:[mt.head], body:mt.body, columnStyles:{0:{cellWidth:46}, [mt.head.length-1]:{fontStyle:'bold'}},
     didParseCell: d => { if (d.column.index>=3) d.cell.styles.halign = 'right'; }}));
   let yt = doc.lastAutoTable.finalY + 10; if (yt > 250){ doc.addPage(); yt = 20; }
-  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20); doc.text('Totales de cable por color y calibre', mx, yt);
-  doc.autoTable(Object.assign({}, base, {startY:yt+3, head:[mt.headT], body:mt.bodyT, foot:mt.footT, columnStyles:{0:{cellWidth:36}},
-    didParseCell: d => { if (d.column.index>=1) d.cell.styles.halign = 'right'; }}));
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20); doc.text('Resumen de cable a comprar', mx, yt);
+  doc.autoTable(Object.assign({}, base, {startY:yt+3, head:[mt.headR], body:mt.bodyR, foot:mt.footR, columnStyles:{0:{cellWidth:52}},
+    didParseCell: d => { if (d.column.index>=3) d.cell.styles.halign = 'right'; }}));
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90);
-  doc.text('El rojo incluye los retornos de interruptor. Cada circuito usa el mismo calibre para sus fases y su tierra.', mx, doc.lastAutoTable.finalY + 7);
+  doc.text('En alumbrado, el rojo incluye el retorno del interruptor. Cada circuito usa el mismo calibre para sus fases y su tierra.', mx, doc.lastAutoTable.finalY + 7);
   return doc.output('arraybuffer');
 }
 async function descargaPDF(compartir){
