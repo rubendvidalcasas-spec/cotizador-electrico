@@ -135,7 +135,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <body>
 <div class="app">
   <header class="head gut">
-    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge">v1.0</span></div>
+    <div class="head-top"><span class="brand">Cotizador Eléctrico</span><span class="badge" id="badge-ver">versión 8</span></div>
     <div class="total-row">
       <div><div class="total-lbl" id="h-lbl">Total cotización</div><div class="total" id="h-total">S/ 0</div></div>
       <div class="head-meta" id="h-meta"></div>
@@ -164,6 +164,7 @@ textarea{width:100%;min-height:160px;border:1px solid var(--line);border-radius:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
+const APP_VERSION = 8;   // subir junto con VERSION en sw.js en cada publicación
 /* ---------- Estado (ejemplo cargado) ---------- */
 const DEF = {
   cliente:'Ejemplo: vivienda de 2 pisos', sistema:'mono', difModo:'grupo', area:120, pisos:2, dist:15,
@@ -956,6 +957,12 @@ document.addEventListener('click', e => {
   if (b.dataset.tipo){ S.soloMO = b.dataset.tipo==='mo'; return update(); }
   if (b.id==='btn-pdf') return descargaPDF(false);
   if (b.id==='btn-share') return descargaPDF(true);
+  if (b.id==='btn-actualizar'){
+    const m = $('#ver-msg'); if (m) m.textContent = 'Buscando versión nueva…';
+    const fin = () => { location.reload(); };
+    if (registroSW) registroSW.update().then(() => setTimeout(fin, 1500), fin); else fin();
+    return;
+  }
   if (b.id==='btn-guardar'){
     const v = paraCliente(compute());
     LISTA.unshift({nombre:(S.cliente || 'Sin nombre') + (S.piso ? ' - ' + S.piso : ''), fecha:new Date().toLocaleDateString('es-PE'), total:v.total, datos:JSON.parse(JSON.stringify(S))});
@@ -1012,11 +1019,24 @@ function drawArchivo(){
     <input class="text-in" id="n-tel" data-neg="tel" inputmode="tel" value="${esc(NEG.tel)}" placeholder="Teléfono" aria-label="Teléfono">
     <input class="text-in" id="n-ruc" data-neg="ruc" inputmode="numeric" value="${esc(NEG.ruc)}" placeholder="RUC (opcional)" aria-label="RUC">
   </div></div>
-  <p class="note">Todo se guarda solo en este celular. Si borras los datos del navegador o desinstalas la app, se pierde.</p>`;
+  <p class="note">Todo se guarda solo en este celular. Si borras los datos del navegador o desinstalas la app, se pierde.</p>
+  <div><h2>Versión de la app</h2><div class="tab" style="gap:8px">
+    <button class="btn btn2" type="button" id="btn-actualizar">Buscar actualización</button>
+    <p class="note" id="ver-msg">Tienes la versión ${APP_VERSION}. La app se actualiza sola al abrirla con internet.</p></div></div>`;
 }
 
 drawDatos(); update(); drawArchivo(); showTab(tabActual);
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+/* ---------- Actualización automática ---------- */
+let registroSW = null;
+if ('serviceWorker' in navigator && location.protocol !== 'file:'){
+  const yaControlada = !!navigator.serviceWorker.controller; let recargada = false;
+  // Cuando llega una versión nueva, la página se recarga sola para mostrarla
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (yaControlada && !recargada){ recargada = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(reg => { registroSW = reg; reg.update().catch(() => {});
+    // Al volver a la app desde segundo plano, busca si hay versión nueva
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+}
 </script>
 </body>
 </html>

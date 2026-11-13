@@ -1,6 +1,6 @@
 // Guarda la app en el celular para que funcione sin internet.
 // Cambia el número de versión cada vez que modifiques index.html para forzar la actualización.
-const VERSION = 'cotizador-v7';
+const VERSION = 'cotizador-v8';
 const PROPIOS = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 const EXTERNOS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
@@ -32,7 +32,7 @@ self.addEventListener('fetch', e => {
   };
   if (propio) {
     // Archivos de la app: primero la red (para recibir actualizaciones), si no hay, lo guardado
-    e.respondWith(fetch(req).then(guardar).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match('index.html'))));
+    e.respondWith(fetch(req.url, {cache: 'no-cache'}).then(guardar).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match('index.html'))));
   } else {
     // Librerías y fuentes: primero lo guardado, porque no cambian
     e.respondWith(caches.match(req).then(r => r || fetch(req).then(guardar)));
