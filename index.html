@@ -253,9 +253,9 @@ function compute(){
   while (dv(AMP[idx][0])>2.5 && idx<AMP.length-1) idx++;
   const fs = AMP[idx][0], caida = dv(fs), tGen = tierraFor(gen);
 
-  const nID = Math.max(1, Math.ceil(circ.length/4)), idA = gen<=40 ? 40 : 63;
+  const nID = Math.max(1, Math.ceil(circ.length/3)), idA = gen<=40 ? 40 : 63;
   const usados = sis.polos + nID*2 + circ.length*2;
-  const porG = Math.max(1, Math.ceil(circ.length/nID)), tamG = Array.from({length:nID}, (_,g) => Math.max(0, Math.min(porG, circ.length - g*porG)));
+  const tamG = reparteGrupos(circ.length, nID);
   const tablero = Math.max(next(TAB, Math.max(12, Math.ceil(usados*1.2))), 12*acomoda(sis.polos, tamG).rows); // mínimo 4 bipolares + 2 de reserva, regla 050-108
 
   // Metrado de cables por geometría: clave "sección|color"
@@ -421,12 +421,14 @@ function acomoda(polosGen, tam){
   });
   return {grupos, rows:row+1};
 }
+// Reparte los circuitos entre los diferenciales lo más parejo posible, máximo 3 por grupo
+function reparteGrupos(n, g){ return Array.from({length:g}, (_,i) => Math.floor(n/g) + (i < n%g ? 1 : 0)); }
 function gruposDif(c){
   const cond = c.sis.polos===2 ? ['rojo',c.B] : c.sis.polos===3 ? ['rojo','negro','azul'] : ['rojo','negro','azul','blanco'];
-  const porG = Math.max(1, Math.ceil(c.circ.length/c.nID));
+  const tam = reparteGrupos(c.circ.length, c.nID); let desde = 0;
   const par = g => c.sis.polos===2 ? [0,1] : c.sis.polos===3 ? [[0,1],[1,2],[0,2]][g%3] : [g%3,3];
   const grupos = [];
-  for (let g=0;g<c.nID;g++) grupos.push({par:par(g), circ:c.circ.map((x,i) => ({x,i})).slice(g*porG,(g+1)*porG)});
+  for (let g=0;g<c.nID;g++){ grupos.push({par:par(g), circ:c.circ.map((x,i) => ({x,i})).slice(desde, desde+tam[g])}); desde += tam[g]; }
   const lay = acomoda(c.sis.polos, grupos.map(g => g.circ.length));
   grupos.forEach((g,i) => Object.assign(g, lay.grupos[i]));
   return {cond, grupos, rows:lay.rows};
@@ -568,7 +570,7 @@ function drawTablero(c){
     <div><span>Interruptor general</span><b>${c.sis.polos}×${c.gen} A</b><small>termomagnético</small></div>
     <div><span>Alimentador</span><b>${c.sis.polos}×${c.fs} mm²</b><small>+ tierra ${c.tGen} mm² · caída ${fmt(c.caida,2)} %</small></div>
     <div><span>Tablero</span><b>${c.tablero} polos</b><small>${c.usados} usados, ${c.tablero-c.usados} de reserva</small></div>
-    <div><span>Diferenciales 30 mA</span><b>${c.nID} × 2×${c.idA} A</b><small>uno por grupo de circuitos</small></div>
+    <div><span>Diferenciales 30 mA</span><b>${c.nID} × 2×${c.idA} A</b><small>uno por cada 3 circuitos</small></div>
   </div></div>
   <div><h2>Tablero y esquema de conexión</h2><div class="panel-fig">${dibujaEsquema(c)}</div>
     <div class="legend">${gruposDif(c).cond.map(k => `<span><span class="dot c-${k}"></span>${({rojo:'L1 rojo',negro:'L2 negro',azul:'L3 azul',blanco:'Neutro blanco'})[k]}</span>`).join('')}<span><span class="dot c-verde"></span>Tierra</span><span>Punto = empalme</span><span>Punteado = espacio libre</span></div>
@@ -576,7 +578,8 @@ function drawTablero(c){
       <li>Corta la energía en el medidor y comprueba con el probador que no hay tensión.</li>
       <li>El alimentador entra por arriba del interruptor general.</li>
       <li>De la salida del general sale un puente o peine a la entrada de cada diferencial.</li>
-      <li>Cada diferencial alimenta solo a los termomagnéticos de su grupo.</li>
+      <li>Cada diferencial va a la cabeza de su grupo de hasta 3 circuitos y alimenta solo a esos termomagnéticos (regla 040-216).</li>
+      <li>El diferencial protege a las personas contra descargas por fuga a tierra. El termomagnético protege los cables contra sobrecarga y cortocircuito. Se necesitan los dos.</li>
       <li>De cada termomagnético salen los dos cables de su circuito, con los colores del esquema.</li>
       <li>La tierra no pasa por ningún interruptor: va de la barra de tierra a cada circuito y al pozo.</li>
       ${c.tri ? `<li>${gruposDif(c).grupos.map((gr,g) => 'Dif. '+(g+1)+' usa '+gr.par.map(i => ({rojo:'R rojo',negro:'S negro',azul:'T azul',blanco:'neutro blanco'})[gruposDif(c).cond[i]]).join(' y ')).join('. ')}. Así la carga queda repartida entre las fases.</li>` : ''}
@@ -766,7 +769,8 @@ function drawFormulas(c){
   ${fx('13. Colores de conductores','Fases: rojo (R), negro (S), azul (T) · Neutro: blanco o gris · Tierra: verde o verde/amarillo','Regla 030-036. En monofásico de dos conductores: negro y rojo, o negro y blanco.')}
   ${fx('14. Mano de obra','Puntos × precio por punto + cargas especiales + alimentador + dispositivos del tablero','Punto = cada salida de luminaria, interruptor o tomacorriente. Dispositivo = cada termomagnético o diferencial. Ahora: '+c.puntos+' puntos y '+c.disp+' dispositivos.')}
   ${fx('15. Equivalencia de calibres','14 AWG ≈ 2.5 mm² · 12 AWG ≈ 4 mm² · 10 AWG ≈ 6 mm²','Alumbrado y tierra en 14 AWG, tomacorrientes en 12 AWG, alimentador de un piso desde 10 AWG.')}
-  ${fx('16. Protección de personas','Diferencial de 30 mA + puesta a tierra ≤ 25 Ω','Reglas 020-132 y 060-712. Un termomagnético por circuito (150-400). Sección mínima 2.5 mm² (030-002).')}
+  ${fx('16. Dónde va el diferencial','General termomagnético → diferencial de 30 mA → termomagnéticos de cada circuito','Regla 040-216: toda vivienda lleva diferencial, en el tablero y después del termomagnético general. Con más de 3 circuitos se agrupan de a tres, con un diferencial a la cabeza de cada grupo. También se permite uno por circuito.')}
+  ${fx('17. Protección de personas','Diferencial de 30 mA + puesta a tierra ≤ 25 Ω','Reglas 020-132 y 060-712. Un termomagnético por circuito (150-400). Sección mínima 2.5 mm² (030-002).')}
   </div></div>
   <div class="warn">Herramienta de presupuesto rápido. Las reglas se tomaron de fuentes que citan el Código Nacional de Electricidad, Utilización 2006, no del texto oficial completo. Una obra real requiere la revisión de un ingeniero electricista colegiado.</div>`;
 }
