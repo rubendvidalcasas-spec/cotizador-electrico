@@ -182,7 +182,7 @@ const save = () => { try { localStorage.setItem('cotiz-elec-v2', JSON.stringify(
 /* ---------- Tablas técnicas (referenciales) ---------- */
 const AMP = [[2.5,18],[4,25],[6,32],[10,44],[16,60],[25,80],[35,100],[50,125]]; // mm², A en tubo
 const ITM = [16,20,25,32,40,50,63,80,100,125];
-const TAB = [4,8,12,18,24,36,48,60];
+const TAB = [12,24,36,48,60];
 const ESP = {
   ducha:{n:'Ducha eléctrica',w:5500,t:'agua'}, therma:{n:'Therma',w:2000,t:'agua'},
   cocina:{n:'Cocina eléctrica o de inducción',w:7000,t:'coc'}, aire:{n:'Aire acondicionado',w:1800,t:'ac'},
@@ -255,7 +255,8 @@ function compute(){
 
   const nID = Math.max(1, Math.ceil(circ.length/4)), idA = gen<=40 ? 40 : 63;
   const usados = sis.polos + nID*2 + circ.length*2;
-  const tablero = next(TAB, Math.max(12, Math.ceil(usados*1.2))); // mínimo 4 bipolares + 2 de reserva, regla 050-108
+  const porG = Math.max(1, Math.ceil(circ.length/nID)), tamG = Array.from({length:nID}, (_,g) => Math.max(0, Math.min(porG, circ.length - g*porG)));
+  const tablero = Math.max(next(TAB, Math.max(12, Math.ceil(usados*1.2))), 12*acomoda(sis.polos, tamG).rows); // mínimo 4 bipolares + 2 de reserva, regla 050-108
 
   // Metrado de cables por geometría: clave "sección|color"
   const f = 1 + s.desp/100, cab = {}, p = s.punta;
@@ -315,7 +316,7 @@ function compute(){
   mat.push({g:'Conexión y consumibles', d:'Lubricante para pasar cable', u:'und', q:Math.ceil(mCable/400), pu:P.lubricante});
   mat.push({g:'Conexión y consumibles', d:'Cintillos de amarre, bolsa de 100', u:'und', q:1, pu:P.cintillos});
   mat.push({g:'Conexión y consumibles', d:'Etiquetas para identificar circuitos', u:'juego', q:1, pu:P.etiquetas});
-  if (!s.tabExiste) mat.push({g:'Tablero', d:'Tablero empotrado '+tablero+' polos, riel DIN, barra de tierra', u:'und', q:1, pu:P.tablero[tablero]});
+  if (!s.tabExiste) mat.push({g:'Tablero', d:'Tablero empotrado '+tablero+' polos, riel DIN, barra de tierra', u:'und', q:1, pu:P.tablero[tablero] || tablero*17});
   mat.push({g:'Tablero', d:'Interruptor general '+sis.polos+'×'+gen+' A', u:'und', q:1, pu:itmPrecio(gen,sis.polos)});
   mat.push({g:'Tablero', d:'Diferencial 2×'+idA+' A, 30 mA', u:'und', q:nID, pu:idA===40?P.id40:P.id63});
   const porItm = {}; circ.forEach(c => porItm[c.itm] = (porItm[c.itm]||0)+1);
@@ -407,99 +408,150 @@ function drawDatos(){
 }
 
 /* ---------- Esquema de conexión: qué cable va a cada interruptor ---------- */
+const PW = 26, X0 = 18, GAP = 14, ROW_W = 340;   // 12 polos por fila, como los gabinetes comerciales
+// Reparte los aparatos en filas de 12 polos: general primero, luego cada diferencial con sus termomagnéticos
+function acomoda(polosGen, tam){
+  let row = 0, x = X0 + polosGen*PW;
+  const grupos = tam.map(n => {
+    let dx = x + GAP;
+    if (dx + 2*PW + (n ? GAP + n*2*PW : 0) > X0 + ROW_W + 0.5){ row++; dx = X0; }
+    const xs = Array.from({length:n}, (_,i) => dx + 2*PW + GAP + i*2*PW);
+    x = n ? xs[n-1] + 2*PW : dx + 2*PW;
+    return {row, dx, xs, fin:x};
+  });
+  return {grupos, rows:row+1};
+}
 function gruposDif(c){
-  const n = Math.max(1, Math.ceil(c.circ.length/c.nID)), cond = c.sis.polos===2 ? ['rojo',c.B] : c.sis.polos===3 ? ['rojo','negro','azul'] : ['rojo','negro','azul','blanco'];
-  const par = g => c.sis.polos===2 ? [0,1] : c.sis.polos===3 ? [[0,1],[1,2],[2,0]][g%3] : [g%3,3];
+  const cond = c.sis.polos===2 ? ['rojo',c.B] : c.sis.polos===3 ? ['rojo','negro','azul'] : ['rojo','negro','azul','blanco'];
+  const porG = Math.max(1, Math.ceil(c.circ.length/c.nID));
+  const par = g => c.sis.polos===2 ? [0,1] : c.sis.polos===3 ? [[0,1],[1,2],[0,2]][g%3] : [g%3,3];
   const grupos = [];
-  for (let g=0;g<c.nID;g++) grupos.push({par:par(g), circ:c.circ.map((x,i) => ({x,i})).slice(g*n,(g+1)*n)});
-  return {cond, grupos};
+  for (let g=0;g<c.nID;g++) grupos.push({par:par(g), circ:c.circ.map((x,i) => ({x,i})).slice(g*porG,(g+1)*porG)});
+  const lay = acomoda(c.sis.polos, grupos.map(g => g.circ.length));
+  grupos.forEach((g,i) => Object.assign(g, lay.grupos[i]));
+  return {cond, grupos, rows:lay.rows};
 }
 function dibujaEsquema(c){
-  // Dibujo pictórico: cada aparato con su forma, capacidad y rótulo, y cada cable con su color
-  const HEX = {rojo:'#D62F2F', negro:'#161616', azul:'#2563EB', blanco:'#FFFFFF', verde:'#1E9E4A'}, ink = '#1B2430';
-  const {cond, grupos} = gruposDif(c), PW = 28, DH = 84, VW = 372;
-  const abrev = {'Tomacorrientes':'Tomas', 'Tomas cocina y lavandería':'Cocina y lav.', 'Ducha eléctrica':'Ducha', 'Electrobomba 1 HP':'Bomba 1 HP',
-    'Aire acondicionado':'Aire acond.', 'Cocina eléctrica o de inducción':'Cocina eléct.', 'Lavaseca o secadora':'Lavaseca'};
+  // Dibujo del gabinete: cada aparato con su forma, capacidad y rótulo; cada cable con su color hasta su tubo
+  const HEX = {rojo:'#D62F2F', negro:'#161616', azul:'#2563EB', blanco:'#FFFFFF', verde:'#1E9E4A'}, ink = '#1B2430', BG = '#F3F1EA';
+  const {cond, grupos, rows} = gruposDif(c), DH = 84, VW = 372, nc = cond.length;
+  const abrev = {'Iluminación':'Luces', 'Tomacorrientes':'Tomas', 'Tomas cocina y lavandería':'Cocina', 'Ducha eléctrica':'Ducha', 'Electrobomba 1 HP':'Bomba',
+    'Aire acondicionado':'Aire ac.', 'Cocina eléctrica o de inducción':'Cocina el.', 'Lavaseca o secadora':'Lavaseca'};
   const corto = n => { const base = n.replace(/ \d+$/,''); return (abrev[base] || base) + n.slice(base.length); };
-  const seg = (pts, col) => { const d = pts.map(p => p.join(',')).join(' ');
-    return `<polyline points="${d}" fill="none" stroke="#4B5563" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${d}" fill="none" stroke="${HEX[col]}" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>`; };
-  const dot = (x,y,col) => `<circle cx="${x}" cy="${y}" r="3.4" fill="${HEX[col]}" stroke="#4B5563" stroke-width="1"/>`;
+  const ruta = pts => { let d = 'M'+pts[0][0]+' '+pts[0][1];
+    for (let i=1;i<pts.length;i++){ const p = pts[i], q = pts[i-1], s = pts[i+1];
+      if (!s){ d += ' L'+p[0]+' '+p[1]; break; }
+      const l1 = Math.hypot(p[0]-q[0],p[1]-q[1]), l2 = Math.hypot(s[0]-p[0],s[1]-p[1]), k = Math.min(7, l1/2, l2/2);
+      if (k<0.5){ d += ' L'+p[0]+' '+p[1]; continue; }
+      d += ` L${p[0]-(p[0]-q[0])/l1*k} ${p[1]-(p[1]-q[1])/l1*k} Q${p[0]} ${p[1]} ${p[0]+(s[0]-p[0])/l2*k} ${p[1]+(s[1]-p[1])/l2*k}`; }
+    return d; };
+  const seg = (pts, col) => { const d = ruta(pts);
+    return `<path d="${d}" fill="none" stroke="#4B5563" stroke-width="5" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${HEX[col]}" stroke-width="3.2" stroke-linecap="round"/>`; };
   // Corte en el cable de abajo: indica que el de arriba pasa por encima sin conectarse
-  const salto = pts => `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="#EEF1F5" stroke-width="10"/>`;
-  const flecha = (x,y,col) => `<polygon points="${x-5},${y} ${x+5},${y} ${x},${y+9}" fill="${HEX[col]}" stroke="#4B5563" stroke-width="1" stroke-linejoin="round"/>`;
-  const riel = (y,x2) => `<rect x="26" y="${y+30}" width="${x2-26}" height="24" fill="#B4BDC9" stroke="#7C8794"/>`;
+  const salto = pts => `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${BG}" stroke-width="10"/>`;
+  const dot = (x,y,col) => `<circle cx="${x}" cy="${y}" r="3.4" fill="${HEX[col]}" stroke="#4B5563" stroke-width="1"/>`;
+  const tubo = (x,y,w) => `<rect x="${x}" y="${y}" width="${w}" height="14" rx="5" fill="#9AA3AD" stroke="#566170" stroke-width="1.1"/><rect x="${x+4}" y="${y+2.5}" width="${w-8}" height="4" rx="2" fill="#4B5563"/>`;
+  const riel = (y,x1,x2) => `<rect x="${x1}" y="${y+30}" width="${x2-x1}" height="24" fill="#B4BDC9" stroke="#7C8794"/>`;
   const borne = (cx,cy) => `<rect x="${cx-9}" y="${cy-6.5}" width="18" height="13" rx="2" fill="#DDE2E8" stroke="#8A95A3" stroke-width=".8"/><circle cx="${cx}" cy="${cy}" r="4" fill="#A3ACB8" stroke="#566170" stroke-width=".8"/><path d="M${cx-2.5} ${cy}h5" stroke="#566170" stroke-width="1"/>`;
   const aparato = (x,y,polos,tipo,cap,rot) => {
     const w = polos*PW, mid = x+w/2;
-    let s = `<rect x="${x}" y="${y}" width="${w}" height="${DH}" rx="4" fill="#F7F8FA" stroke="#566170" stroke-width="1.2"/>`;
+    let s = `<rect x="${x}" y="${y}" width="${w}" height="${DH}" rx="4" fill="#FBFBFC" stroke="#566170" stroke-width="1.2"/>`;
     for (let k=0;k<polos;k++){ const cx = x+PW/2+k*PW; s += borne(cx,y+8.5) + borne(cx,y+DH-8.5);
       if (k>0) s += `<path d="M${x+k*PW} ${y+17}v${DH-34}" stroke="#C3CCD7" stroke-width="1"/>`; }
     s += `<text x="${mid}" y="${y+28}" font-size="11" font-weight="700" text-anchor="middle" fill="${ink}">${cap}</text>`;
     if (tipo==='dif'){
       s += `<text x="${mid}" y="${y+38}" font-size="7.5" text-anchor="middle" fill="${ink}">30 mA</text>
-        <rect x="${x+7}" y="${y+42}" width="16" height="12" rx="2" fill="#E8892B" stroke="#8A4E17" stroke-width=".8"/><text x="${x+15}" y="${y+51}" font-size="8" font-weight="700" text-anchor="middle" fill="#3B2408">T</text>
-        <rect x="${x+w-24}" y="${y+41}" width="15" height="14" rx="2" fill="#1E9E4A" stroke="#14532D" stroke-width=".8"/>`;
+        <rect x="${x+6}" y="${y+42}" width="16" height="12" rx="2" fill="#E8892B" stroke="#8A4E17" stroke-width=".8"/><text x="${x+14}" y="${y+51}" font-size="8" font-weight="700" text-anchor="middle" fill="#3B2408">T</text>
+        <rect x="${x+w-22}" y="${y+41}" width="15" height="14" rx="2" fill="#1E9E4A" stroke="#14532D" stroke-width=".8"/>`;
     } else {
       const col = tipo==='gen' ? '#12233F' : '#2F3B4D';
-      s += `<rect x="${x+8}" y="${y+37}" width="${w-16}" height="8" rx="2" fill="${col}"/><rect x="${mid-9}" y="${y+33}" width="18" height="18" rx="2.5" fill="${col}"/><rect x="${mid-6}" y="${y+36}" width="12" height="5" rx="1.5" fill="#9AA6B5"/>`;
+      s += `<rect x="${x+7}" y="${y+37}" width="${w-14}" height="8" rx="2" fill="${col}"/><rect x="${mid-9}" y="${y+33}" width="18" height="18" rx="2.5" fill="${col}"/><rect x="${mid-6}" y="${y+36}" width="12" height="5" rx="1.5" fill="#9AA6B5"/>`;
     }
     s += `<rect x="${x+4}" y="${y+DH-30}" width="${w-8}" height="12" rx="2" fill="#FFF7C2" stroke="#B59B1A" stroke-width=".8"/><text x="${mid}" y="${y+DH-21}" font-size="8" font-weight="700" text-anchor="middle" fill="${ink}">${rot}</text>`;
     return s;
   };
-  const R = [], W = [], A = [], D = [], F = [], T = [];
-  // Fila del interruptor general
-  const gx = 34, gy = 40, gw = c.sis.polos*PW, gBot = gy+DH, bus = cond.map((_,i) => 6+i*6), busFin = cond.map((_,i) => gBot+18+6*i);
-  R.push(riel(gy, gx+gw+8));
-  const letra = {rojo:'L1', negro: c.sis.polos===2 ? 'L2' : 'L2', azul:'L3', blanco:'N'};
-  cond.forEach((col,i) => { const x = gx+PW/2+i*PW; W.push(seg([[x,6],[x,gy+8]],col));
-    T.push(`<text x="${x+5}" y="26" font-size="8" font-weight="700" fill="${ink}">${letra[col]}</text>`); });
-  A.push(aparato(gx,gy,c.sis.polos,'gen','C'+c.gen,'General'));
-  const tx = gx+gw+16;
-  T.push(`<text x="${tx}" y="${gy+22}" font-size="9.5" font-weight="700" fill="${ink}">Interruptor general</text>
-    <text x="${tx}" y="${gy+34}" font-size="9" fill="${ink}">${c.sis.polos}×${c.gen} A</text>
-    <text x="${tx}" y="${gy+54}" font-size="8" fill="#4B5563">Alimentador del medidor</text>
-    <text x="${tx}" y="${gy+65}" font-size="8" fill="#4B5563">${c.sis.polos}×${c.fs} mm² + tierra ${c.tGen} mm²</text>
-    <text x="358" y="14" font-size="7.5" text-anchor="end" fill="#4B5563">Tierra</text>`);
-  // Una fila por cada diferencial con sus termomagnéticos
-  let y0 = gBot + 52;
+  const libre = (x,y) => `<rect x="${x+1.5}" y="${y}" width="${PW-3}" height="${DH}" rx="3" fill="none" stroke="#8A95A3" stroke-dasharray="4 3"/>`;
+
+  // Alturas de cada fila: las ocupadas llevan canal de cables arriba y salida a tubos abajo
+  const totalFilas = Math.max(rows, Math.round(c.tablero/12)), yTs = [];
+  let yy = 38;
+  for (let r=0;r<totalFilas;r++){ if (r<rows){ yTs.push(yy+34); yy += 208; } else { yTs.push(yy+12); yy += 112; } }
+  const yFin = yy;
+  const R = [], V = [], W = [], A = [], D = [], U = [], T = [], L = [];   // rieles, verdes, cables, aparatos, puntos, tubos, textos, libres
+  const usadosFila = Array(totalFilas).fill(0), finFila = Array(totalFilas).fill(X0);
+
+  // Interruptor general, siempre arriba a la izquierda
+  const gx = X0, gy = yTs[0], gw = nc*PW, gB = gy+DH, gt = i => gx+PW/2+i*PW;
+  usadosFila[0] += nc; finFila[0] = gx+gw;
+  cond.forEach((col,i) => W.push(seg([[gt(i),12],[gt(i),gy+8]],col)));
+  U.push(tubo(gx+gw/2-Math.max(21,gw/2-4), 4, Math.max(42,gw-8)));
+  const letra = {rojo:'L1', negro:'L2', azul:'L3', blanco:'N'};
+  cond.forEach((col,i) => T.push(`<text x="${gt(i)+5}" y="32" font-size="8" font-weight="700" fill="${ink}">${letra[col]}</text>`));
+  A.push(aparato(gx,gy,nc,'gen','C'+c.gen,'General'));
+  const txt = gx + Math.max(gw,50) + 14;
+  T.push(`<text x="${txt}" y="15" font-size="8.8" font-weight="700" fill="${ink}">Viene del medidor</text>
+    <text x="${txt}" y="26" font-size="8.3" fill="#4B5563">Alimentador ${nc}×${c.fs} mm²</text>`);
+
+  // Barras que bajan por la izquierda hacia las filas de abajo
+  const sp = nc>3 ? 4 : 5, trX = i => 15 - i*sp, prof = i => gB + 10 + 6*(nc-1-i), trFin = cond.map(() => 0);
+  const enlace = [];   // conductores del general ya dibujados (para poner el punto de empalme si se bifurcan)
+
   grupos.forEach((gr,g) => {
-    const [ia,ib] = gr.par, a = cond[ia], b = cond[ib], yT = y0+28, yB = yT+DH, dx = 34, n = gr.circ.length, xs = gr.circ.map((_,i) => 110+i*60);
-    R.push(riel(yT, (n ? xs[n-1] : dx) + 64));
-    W.push(salto([[bus[ia]+4,yT-12],[dx+8,yT-12]]), seg([[bus[ia],yT-12],[dx+14,yT-12],[dx+14,yT+8]],a),
-      salto([[bus[ib]+4,yT-22],[dx+36,yT-22]]), seg([[bus[ib],yT-22],[dx+42,yT-22],[dx+42,yT+8]],b));
-    busFin[ia] = Math.max(busFin[ia], yT-12); busFin[ib] = Math.max(busFin[ib], yT-22);
-    D.push(dot(bus[ia],yT-12,a), dot(bus[ib],yT-22,b));
+    const [ia,ib] = gr.par, a = cond[ia], b = cond[ib], yT = yTs[gr.row], yB = yT+DH, dx = gr.dx, n = gr.circ.length, xs = gr.xs, da = dx+13, db = dx+39;
+    usadosFila[gr.row] += 2 + 2*n; finFila[gr.row] = Math.max(finFila[gr.row], gr.fin);
+    if (gr.row===0){
+      // Del general (sale por abajo) al diferencial (entra por arriba), subiendo por el espacio entre ambos
+      const rb = gx+gw+4, ra = gx+gw+10;
+      W.push(seg([[gt(ia),gB-8],[gt(ia),prof(ia)],[ra,prof(ia)],[ra,yT-12],[da,yT-12],[da,yT+8]],a));
+      W.push(seg([[gt(ib),gB-8],[gt(ib),prof(ib)],[rb,prof(ib)],[rb,yT-22],[db,yT-22],[db,yT+8]],b));
+      enlace.push(ia,ib);
+    } else {
+      W.push(salto([[trX(ia)+2.6,yT-12],[X0-1,yT-12]]), seg([[trX(ia),yT-12],[da,yT-12],[da,yT+8]],a),
+             salto([[trX(ib)+2.6,yT-22],[X0-1,yT-22]]), seg([[trX(ib),yT-22],[db,yT-22],[db,yT+8]],b));
+      trFin[ia] = Math.max(trFin[ia], yT-12); trFin[ib] = Math.max(trFin[ib], yT-22);
+      D.push(dot(trX(ia),yT-12,a), dot(trX(ib),yT-22,b));
+    }
     A.push(aparato(dx,yT,2,'dif',c.idA+' A','Dif. '+(g+1)));
     if (n){
-      const xa = xs[n-1]+14, xb = xs[n-1]+42;
-      W.push(seg([[dx+14,yB-8],[dx+14,yB+18],[105,yB+18],[105,yT-12],[xa,yT-12],[xa,yT+8]],a));
-      W.push(seg([[dx+42,yB-8],[dx+42,yB+10],[98,yB+10],[98,yT-22],[xb,yT-22],[xb,yT+8]],b));
+      // Del diferencial (sale por abajo) a sus termomagnéticos (entran por arriba)
+      const xa = xs[n-1]+13, xb = xs[n-1]+39, r2b = dx+2*PW+4, r2a = dx+2*PW+10;
+      W.push(seg([[da,yB-8],[da,yB+17],[r2a,yB+17],[r2a,yT-12],[xa,yT-12],[xa,yT+8]],a));
+      W.push(seg([[db,yB-8],[db,yB+10],[r2b,yB+10],[r2b,yT-22],[xb,yT-22],[xb,yT+8]],b));
+      // Tierra de la fila: sale de la barra de tierra y entra a cada tubo junto a los otros dos cables
+      V.push(seg([[366,yB+22],[xs[0]+26,yB+22],[xs[0]+26,yB+42]],'verde')); D.push(dot(366,yB+22,'verde'));
       gr.circ.forEach((it,i) => { const x = xs[i];
-        if (i<n-1){ W.push(seg([[x+14,yT-12],[x+14,yT+8]],a), salto([[x+42,yT-17],[x+42,yT-7]]), seg([[x+42,yT-22],[x+42,yT+8]],b)); D.push(dot(x+14,yT-12,a), dot(x+42,yT-22,b)); }
-        W.push(seg([[x+14,yB-8],[x+14,yB+24]],a), seg([[x+42,yB-8],[x+42,yB+24]],b), seg([[x+28,yB+82],[x+28,yB+71]],'verde'));
-        F.push(flecha(x+14,yB+24,a), flecha(x+42,yB+24,b)); D.push(dot(x+28,yB+82,'verde'));
+        if (i<n-1){ W.push(seg([[x+13,yT-12],[x+13,yT+8]],a), salto([[x+39,yT-17],[x+39,yT-7]]), seg([[x+39,yT-22],[x+39,yT+8]],b)); D.push(dot(x+13,yT-12,a), dot(x+39,yT-22,b)); }
+        if (i>0){ V.push(seg([[x+26,yB+22],[x+26,yB+42]],'verde')); D.push(dot(x+26,yB+22,'verde')); W.push(salto([[x+13,yB+16],[x+13,yB+28]])); }
+        W.push(seg([[x+13,yB-8],[x+13,yB+42]],a), salto([[x+39,yB+16],[x+39,yB+28]]), seg([[x+39,yB-8],[x+39,yB+42]],b));
+        U.push(tubo(x+5,yB+38,42));
         A.push(aparato(x,yT,2,'itm','C'+it.x.itm,'C'+(it.i+1)));
-        T.push(`<text x="${x+28}" y="${yB+46}" font-size="9" font-weight="700" text-anchor="middle" fill="${ink}">C${it.i+1}</text>
-          <text x="${x+28}" y="${yB+56}" font-size="8.3" text-anchor="middle" fill="${ink}">${esc(corto(it.x.nombre))}</text>
-          <text x="${x+28}" y="${yB+66}" font-size="8.3" text-anchor="middle" fill="#4B5563">${it.x.sec} mm²</text>`);
+        T.push(`<text x="${x+26}" y="${yB+64}" font-size="9" font-weight="700" text-anchor="middle" fill="${ink}">C${it.i+1}</text>
+          <text x="${x+26}" y="${yB+74}" font-size="8" text-anchor="middle" fill="${ink}">${esc(corto(it.x.nombre))}</text>
+          <text x="${x+26}" y="${yB+84}" font-size="8" text-anchor="middle" fill="#4B5563">${it.x.sec} mm²</text>`);
       });
-      W.push(seg([[xs[0]+28,yB+82],[364,yB+82]],'verde')); D.push(dot(364,yB+82,'verde'));
     }
-    y0 = yB + 96;
   });
-  // Barras que bajan del general a cada diferencial
-  cond.forEach((col,i) => { const x = gx+PW/2+i*PW, yc = gBot+8+6*i; W.unshift(seg([[x,gBot-8],[x,yc],[bus[i],yc],[bus[i],busFin[i]]],col)); });
-  const yBar = y0 + 4, VH = yBar + 52;
-  return `<svg viewBox="0 0 ${VW} ${VH}" width="100%" role="img" aria-label="Esquema de conexión del tablero" font-family="inherit">
-    <rect x="1" y="1" width="${VW-2}" height="${VH-2}" rx="6" fill="#EEF1F5" stroke="#9AA6B5"/>
-    ${R.join('')}${seg([[364,6],[364,yBar]],'verde')}${W.join('')}${A.join('')}${D.join('')}${F.join('')}${T.join('')}
-    <rect x="236" y="${yBar}" width="132" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
-    <text x="228" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>
-    ${seg([[300,yBar+13],[300,yBar+30]],'verde')}
-    <path d="M288 ${yBar+31}h24M292 ${yBar+36}h16M296 ${yBar+41}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
-    <text x="320" y="${yBar+38}" font-size="8.3" fill="${ink}">Pozo a tierra</text>
-    <text x="10" y="${yBar+30}" font-size="8.6" font-weight="700" fill="${ink}">Tablero de ${c.tablero} polos</text>
-    <text x="10" y="${yBar+41}" font-size="8.3" fill="#4B5563">${c.usados} usados, ${c.tablero-c.usados} libres de reserva</text></svg>`;
+  // Bajadas del general a las filas de abajo (solo los conductores que se usan allí)
+  cond.forEach((col,i) => { if (!trFin[i]) return;
+    W.push(salto([[trX(i)+4,prof(i)],[gt(i)-5,prof(i)]]), seg([[gt(i),gB-8],[gt(i),prof(i)],[trX(i),prof(i)],[trX(i),trFin[i]]],col));
+    if (enlace.includes(i)) D.push(dot(gt(i),prof(i),col)); });
+  // Rieles y espacios libres
+  for (let r=0;r<totalFilas;r++){ R.push(riel(yTs[r], X0-6, X0+ROW_W+6));
+    for (let k=0;k<12-usadosFila[r];k++) L.push(libre(finFila[r] + (usadosFila[r] ? 4 : 0) + k*PW, yTs[r])); }
+  // Barra de tierra y pozo
+  const yBar = yFin + 2, yCaja = yBar + 30;
+  V.push(seg([[366, (yTs[0]+DH+22)],[366,yBar+6],[352,yBar+6]],'verde'), seg([[236,yBar+13],[236,yCaja+14]],'verde'));
+  return `<svg viewBox="0 0 ${VW} ${yCaja+34}" width="100%" role="img" aria-label="Tablero y esquema de conexión" font-family="inherit">
+    <rect x="1" y="9" width="${VW-2}" height="${yCaja-9}" rx="10" fill="${BG}" stroke="#8C8572" stroke-width="2"/>
+    ${R.join('')}${L.join('')}${V.join('')}${W.join('')}${A.join('')}${D.join('')}${U.join('')}${T.join('')}
+    <rect x="200" y="${yBar}" width="156" height="13" rx="2" fill="#D4AF37" stroke="#8C7420"/>
+    ${[0,1,2,3,4,5,6,7,8].map(k => `<circle cx="${212+k*16.5}" cy="${yBar+6.5}" r="2.6" fill="#F3E3A1" stroke="#8C7420" stroke-width=".7"/>`).join('')}
+    <text x="192" y="${yBar+10}" font-size="8.8" font-weight="700" text-anchor="end" fill="${ink}">Barra de tierra</text>
+    <text x="12" y="${yBar+8}" font-size="8.6" font-weight="700" fill="${ink}">Tablero de ${c.tablero} polos</text>
+    <text x="12" y="${yBar+19}" font-size="8" fill="#4B5563">${c.usados} usados, ${c.tablero-c.usados} libres</text>
+    ${tubo(215,yCaja-7,42)}
+    <path d="M224 ${yCaja+15}h24M228 ${yCaja+20}h16M232 ${yCaja+25}h8" stroke="#1E9E4A" stroke-width="2.4" stroke-linecap="round"/>
+    <text x="256" y="${yCaja+22}" font-size="8.3" fill="${ink}">Pozo a tierra, cable ${c.tGen} mm²</text></svg>`;
 }
 
 /* ---------- Pestañas de resultados ---------- */
@@ -519,7 +571,7 @@ function drawTablero(c){
     <div><span>Diferenciales 30 mA</span><b>${c.nID} × 2×${c.idA} A</b><small>uno por grupo de circuitos</small></div>
   </div></div>
   <div><h2>Tablero y esquema de conexión</h2><div class="panel-fig">${dibujaEsquema(c)}</div>
-    <div class="legend">${gruposDif(c).cond.map(k => `<span><span class="dot c-${k}"></span>${({rojo:'L1 rojo',negro:'L2 negro',azul:'L3 azul',blanco:'Neutro blanco'})[k]}</span>`).join('')}<span><span class="dot c-verde"></span>Tierra</span><span>Punto = empalme</span></div>
+    <div class="legend">${gruposDif(c).cond.map(k => `<span><span class="dot c-${k}"></span>${({rojo:'L1 rojo',negro:'L2 negro',azul:'L3 azul',blanco:'Neutro blanco'})[k]}</span>`).join('')}<span><span class="dot c-verde"></span>Tierra</span><span>Punto = empalme</span><span>Punteado = espacio libre</span></div>
     <ol class="pasos">
       <li>Corta la energía en el medidor y comprueba con el probador que no hay tensión.</li>
       <li>El alimentador entra por arriba del interruptor general.</li>
@@ -529,7 +581,7 @@ function drawTablero(c){
       <li>La tierra no pasa por ningún interruptor: va de la barra de tierra a cada circuito y al pozo.</li>
       ${c.tri ? `<li>${gruposDif(c).grupos.map((gr,g) => 'Dif. '+(g+1)+' usa '+gr.par.map(i => ({rojo:'R rojo',negro:'S negro',azul:'T azul',blanco:'neutro blanco'})[gruposDif(c).cond[i]]).join(' y ')).join('. ')}. Así la carga queda repartida entre las fases.</li>` : ''}
     </ol>
-    <p class="note">Hay una fila por cada diferencial con sus termomagnéticos. El rótulo amarillo de cada aparato es la etiqueta que se pega en el tablero.</p></div>
+    <p class="note">El gabinete se dibuja por filas de 12 polos. El rótulo amarillo es la etiqueta de cada aparato. En cada tubo entran los tres cables del circuito: los dos de fuerza y el de tierra. En el gabinete real, los cables de las filas de arriba bajan por detrás del riel hasta sus tubos.</p></div>
   <div><h2>Cuadro de circuitos</h2><div class="tw"><table>
     <tr><th>Circuito</th><th class="n">Carga</th><th class="n">ITM</th><th class="n">Cable</th></tr>
     ${c.circ.map((x,i) => `<tr><td>C${i+1} · ${x.nombre}<span class="sub">${x.det} · ${fmt(x.i,1)} A</span></td><td class="n">${fmt(x.w)} W</td><td class="n">2×${x.itm} A</td><td class="n">${x.sec} mm²<span class="sub">T ${x.tierra}</span></td></tr>`).join('')}
